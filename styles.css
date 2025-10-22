@@ -1,0 +1,20 @@
+:root { --bg:#f8fafc; --fg:#0f172a; --muted:#64748b; --card:#ffffff; --ring:#e2e8f0; }
+* { box-sizing: border-box; }
+body { margin:0; font:16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color:var(--fg); background:var(--bg); }
+header, footer { padding:1rem; max-width:960px; margin:0 auto; }
+main { max-width:960px; margin:0 auto; padding:1rem; display:grid; gap:1rem; }
+h1,h2 { margin:0 0 .5rem; }
+.card { background:var(--card); border:1px solid var(--ring); border-radius:16px; padding:1rem; }
+.row.header { display:flex; justify-content:space-between; align-items:center; }
+.grid { display:grid; gap:.5rem; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+label { display:flex; flex-direction:column; gap:.25rem; font-weight:600; }
+input { padding:.6rem .7rem; border:1px solid var(--ring); border-radius:10px; }
+button {
+  cursor:pointer; border:1px solid var(--ring); background:var(--fg); color:#fff;
+  padding:.6rem .9rem; border-radius:10px; font-weight:700;
+}
+button.remove-loan { background:#ef4444; border-color:#fecaca; }
+.actions { display:flex; justify-content:flex-end; }
+#allocation-table table { width:100%; border-collapse: collapse; margin-top:.5rem; }
+#allocation-table th, #allocation-table td { border-bottom:1px solid var(--ring); text-align:left; padding:.5rem; }
+.loan { margin:.75rem 0; }
