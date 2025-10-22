@@ -10,23 +10,23 @@ function addLoanRow() {
 }
 
 // Simplified cost model: estimates total dollars repaid per dollar borrowed
-// Includes orig fee, in-school accrual interest (simple), and term amortization (APR approx)
-function costPerDollar({aprPct, feePct, accrualMonths, termYears}) {
-  const apr = (aprPct || 0) / 100;
+// Includes orig fee, in-school accrual interest (simple), and term amortization (Interest Rate approx)
+function costPerDollar({interestRate, feePct, accrualMonths, termYears}) {
+  const rate = (interestRate || 0) / 100;
   const fee = (feePct || 0) / 100;
   const term = Math.max(1, termYears || 10);
   const months = Math.max(0, accrualMonths || 0);
   // Origination fee increases amount owed at t0:
   const principal_effective = 1 + fee;
 
-  // In-school simple interest (approx) on principal for months/12 at APR
-  const in_school_interest = apr * (months/12);
+  // In-school simple interest (approx) on principal for months/12 at Interest Rate
+  const in_school_interest = rate * (months/12);
 
   // Amortized repayment interest on (principal + accrued) across term
   // Rough factor: total repaid ≈ principal * (1 + avg_rate * term)
-  // Using a conservative approximation (APR * term * 0.55) to mimic amortization curve,
+  // Using a conservative approximation (Interest Rate * term * 0.55) to mimic amortization curve,
   // so it doesn't overstate like simple interest.
-  const amortization_interest_factor = apr * term * 0.55;
+  const amortization_interest_factor = rate * term * 0.55;
 
   const total_factor = principal_effective * (1 + in_school_interest) * (1 + amortization_interest_factor);
   return total_factor; // dollars repaid per $1 borrowed
@@ -36,7 +36,7 @@ function readLoans() {
   return $$('.loan').map((el, i) => ({
     id: i+1,
     name: $('.loan-name', el)?.value?.trim() || `Loan ${i+1}`,
-    aprPct: parseFloat($('.loan-apr', el)?.value || '0'),
+    interestRate: parseFloat($('.loan-interest', el)?.value || '0'),
     feePct: parseFloat($('.loan-fee', el)?.value || '0'),
     cap: parseFloat($('.loan-cap', el)?.value || '0'),
     termYears: parseFloat($('.loan-term', el)?.value || '10'),
@@ -87,7 +87,7 @@ function renderResults(allocation, target, feasible, shortfall) {
     <tr>
       <td>${x.name}</td>
       <td>${x.used.toFixed(2)}</td>
-      <td>${x.aprPct.toFixed(2)}%</td>
+      <td>${x.interestRate.toFixed(2)}%</td>
       <td>${x.feePct.toFixed(3)}%</td>
       <td>${x.termYears} yrs</td>
       <td>${x.accrualMonths} mo</td>
@@ -99,7 +99,7 @@ function renderResults(allocation, target, feasible, shortfall) {
     <table aria-describedby="allocation-summary">
       <thead>
         <tr>
-          <th>Loan</th><th>Amount ($)</th><th>APR</th><th>Orig Fee</th>
+          <th>Loan</th><th>Amount ($)</th><th>Interest Rate</th><th>Orig Fee</th>
           <th>Term</th><th>In-School</th><th>Cost per $</th>
         </tr>
       </thead>
@@ -124,7 +124,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const [l1, l2] = $$('.loan');
   if (l1) {
     $('.loan-name', l1).value = 'Direct Subsidized';
-    $('.loan-apr', l1).value = '6.53';
+    $('.loan-interest', l1).value = '6.53';
     $('.loan-fee', l1).value = '1.057';
     $('.loan-cap', l1).value = '5500';
     $('.loan-term', l1).value = '10';
@@ -132,7 +132,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   if (l2) {
     $('.loan-name', l2).value = 'Direct Unsubsidized';
-    $('.loan-apr', l2).value = '8.08';
+    $('.loan-interest', l2).value = '8.08';
     $('.loan-fee', l2).value = '1.057';
     $('.loan-cap', l2).value = '12000';
     $('.loan-term', l2).value = '10';
