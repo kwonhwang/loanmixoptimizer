@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>AI Loan Mix Optimizer</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<header>
+  <h1>AI Loan Mix Optimizer</h1>
+  <p>Compare loan options and find a low-cost mix to cover your need.</p>
+</header>
+
+<main>
+  <section class="card">
+    <h2>Amount to Finance</h2>
+    <label>Target Amount ($)
+      <input id="target-amount" type="number" min="0" step="0.01" placeholder="20000" required />
+    </label>
+  </section>
+
+  <section class="card">
+    <div class="row header">
+      <h2>Loan Options</h2>
+      <button id="add-loan" type="button">+ Add Loan</button>
+    </div>
+
+    <div id="loans"></div>
+    <template id="loan-row">
+      <fieldset class="loan">
+        <div class="grid">
+          <label>Name
+            <input type="text" class="loan-name" placeholder="e.g., Direct Subsidized" />
+          </label>
+          <label>APR (%)
+            <input type="number" class="loan-apr" min="0" step="0.01" placeholder="6.53" />
+          </label>
+          <label>Origination Fee (% of principal)
+            <input type="number" class="loan-fee" min="0" step="0.01" placeholder="1.057" />
+          </label>
+          <label>Borrowing Cap ($)
+            <input type="number" class="loan-cap" min="0" step="0.01" placeholder="5500" />
+          </label>
+          <label>Repayment Term (years)
+            <input type="number" class="loan-term" min="1" step="1" placeholder="10" />
+          </label>
+          <label>In-School Accrual (months)
+            <input type="number" class="loan-accrual" min="0" step="1" placeholder="24" />
+          </label>
+        </div>
+        <button type="button" class="remove-loan">Remove</button>
+      </fieldset>
+    </template>
+  </section>
+
+  <section class="card actions">
+    <button id="optimize" type="button">Optimize Mix</button>
+  </section>
+
+  <section id="results" class="card" hidden>
+    <h2>Results</h2>
+    <div id="allocation-table"></div>
+    <div id="summary"></div>
+  </section>
+
+  <section id="explain" class="card" hidden>
+    <h2>Explanation</h2>
+    <p id="explanation-text">Coming soon (GPT integration).</p>
+  </section>
+</main>
+
+<footer>
+  <p>© 2025 Kwon Hwang • For educational planning</p>
+</footer>
+
+<script src="app.js" defer></script>
+</body>
+</html>
