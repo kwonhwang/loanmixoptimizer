@@ -1,47 +1,41 @@
-// api/parse.js
-// Turns messy text into structured fields: { target, loans: [...], errors: [...] }
+// api/parse.js — Free-text → structured JSON with CORS + robust body parsing
 
 function setCORS(res) {
-  // TODO: set to your real GitHub Pages origin (scheme + host only)
+  // Your site origin (scheme + host only; no trailing slash)
   res.setHeader("Access-Control-Allow-Origin", "https://kwonhwang.github.io");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 }
 
+async function readJsonBody(req) {
+  try {
+    if (req.body && typeof req.body === "object") return req.body;
+    if (req.body && typeof req.body === "string") return JSON.parse(req.body);
+    const chunks = [];
+    for await (const ch of req) chunks.push(ch);
+    const raw = Buffer.concat(chunks).toString("utf8");
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
 export default async function handler(req, res) {
   setCORS(res);
-  if (req.method === "OPTIONS") {
-    // CORS preflight
-    return res.status(200).end();
-  }
-
-  if (req.method !== "POST") {
-    return res.status(405).json({ errors: ["Method not allowed. Use POST."] });
-  }
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST") return res.status(405).json({ errors: ["Use POST"] });
 
   try {
-    const { text } = req.body || {};
-    if (!text || typeof text !== "string" || !text.trim()) {
-      return res.status(400).json({ errors: ["Supply a non-empty 'text' string."] });
-    }
+    const body = await readJsonBody(req);
+    const text = (body?.text ?? "").toString();
+    if (!text.trim()) return res.status(400).json({ errors: ["Supply a non-empty 'text' string."] });
 
-    // The shape we want back from the model
     const schemaHint = {
       target: 0,
-      loans: [
-        {
-          name: "",
-          interestRate: 0,
-          feePct: 0,
-          cap: 0,
-          termYears: 10,
-          accrualMonths: 0
-        }
-      ],
+      loans: [{ name: "", interestRate: 0, feePct: 0, cap: 0, termYears: 10, accrualMonths: 0 }],
       errors: []
     };
 
-    // Compact, strict prompt for JSON-only
     const prompt = `
 Extract ONLY a JSON object matching this exact schema:
 ${JSON.stringify(schemaHint, null, 2)}
@@ -49,13 +43,11 @@ ${JSON.stringify(schemaHint, null, 2)}
 Rules:
 - Use numbers (not strings) for numeric fields.
 - If a value is missing/ambiguous, set it to null and push a short note into "errors".
-- Output ONLY JSON. No extra commentary.
+- Output ONLY JSON (no extra commentary).
 
 Text:
-"""${text}"""
-    `.trim();
+"""${text}"""`.trim();
 
-    // Call OpenAI
     const r = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
@@ -71,31 +63,35 @@ Text:
 
     const data = await r.json();
     if (!r.ok) {
-      // Log full error to Vercel function logs; return a generic message to client
       console.error("OpenAI error", { status: r.status, data });
       return res.status(502).json({ errors: ["Upstream AI error. Check function logs."] });
     }
 
-    // The JSON string returned by json mode is at this path:
     const raw = data?.output?.[0]?.content?.[0]?.text ?? "{}";
-
     let parsed;
-    try {
-      parsed = JSON.parse(raw);
-    } catch (e) {
+    try { parsed = JSON.parse(raw); }
+    catch (e) {
       console.error("JSON parse failed. Raw:", raw);
-      return res.status(422).json({ errors: ["Invalid JSON from parser. Try simplifying your text."] });
+      return res.status(422).json({ errors: ["Invalid JSON from parser. Try a simpler sentence."] });
     }
 
-    // Final safety defaults
-    if (typeof parsed !== "object" || parsed === null) parsed = {};
-    if (!Array.isArray(parsed.loans)) parsed.loans = [];
-    if (!Array.isArray(parsed.errors)) parsed.errors = [];
+    // Normalize shape & types
+    const out = {
+      target: Number(parsed?.target),
+      loans: Array.isArray(parsed?.loans) ? parsed.loans.map(l => ({
+        name: l?.name ?? "",
+        interestRate: Number(l?.interestRate),
+        feePct: Number(l?.feePct),
+        cap: Number(l?.cap),
+        termYears: Number(l?.termYears),
+        accrualMonths: Number(l?.accrualMonths)
+      })) : [],
+      errors: Array.isArray(parsed?.errors) ? parsed.errors : []
+    };
 
-    return res.status(200).json(parsed);
-
+    return res.status(200).json(out);
   } catch (e) {
     console.error("parse handler error:", e);
-    return res.status(500).json({ errors: [e.message || "Server error."] });
+    return res.status(500).json({ errors: [e.message || "Server error"] });
   }
 }
