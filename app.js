@@ -1,64 +1,78 @@
 const $ = (sel, root=document)=>root.querySelector(sel);
 const $$ = (sel, root=document)=>[...root.querySelectorAll(sel)];
-const API_BASE = "https://loanmixoptimizer-kwon-hwangs-projects.vercel.app/";
+const API_BASE = "https://loanmixoptimizer-kwon-hwangs-projects.vercel.app";
 
-// front-end calls to API
+// ---------- Front-end calls to API ----------
 async function parseFreeTextAndFill() {
   const raw = document.getElementById('free-text').value || "";
   if (!raw.trim()) { alert("Paste some text first."); return; }
 
-  const res = await fetch(`${API_BASE}/api/parse`, {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({ text: raw })
-  }).then(r => r.json()).catch(()=>({ errors:["Network error"] }));
+  try {
+    const res = await fetch(`${API_BASE}/api/parse`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ text: raw })
+    });
+    const data = await res.json();
+    console.log("Parse response:", data);
 
-  if (res.errors?.length) {
-    alert("Parser notes:\n- " + res.errors.join("\n- "));
+    if (data.errors?.length) {
+      alert("Parser notes:\n- " + data.errors.join("\n- "));
+    }
+
+    // populate form fields (guard nulls)
+    if (typeof data.target === "number" && !Number.isNaN(data.target)) {
+      document.getElementById('target-amount').value = data.target;
+    }
+
+    // ensure you have enough loan rows visible
+    const existing = document.querySelectorAll('.loan').length;
+    const needed = (data.loans?.length || 0) - existing;
+    for (let i = 0; i < needed; i++) document.getElementById('add-loan').click();
+
+    // fill rows
+    const rows = [...document.querySelectorAll('.loan')];
+    (data.loans || []).forEach((l, i) => {
+      const row = rows[i];
+      if (!row) return;
+      row.querySelector('.loan-name').value = l?.name ?? "";
+      row.querySelector('.loan-interest').value = l?.interestRate ?? "";
+      row.querySelector('.loan-fee').value = l?.feePct ?? "";
+      row.querySelector('.loan-cap').value = l?.cap ?? "";
+      row.querySelector('.loan-term').value = l?.termYears ?? "";
+      row.querySelector('.loan-accrual').value = l?.accrualMonths ?? "";
+    });
+
+  } catch (e) {
+    console.error("Parse error:", e);
+    alert("Network/server error while parsing. Check API_BASE URL and CORS on your Vercel function.");
   }
-
-  // populate form fields (guard nulls)
-  if (typeof res.target === "number" && !Number.isNaN(res.target)) {
-    document.getElementById('target-amount').value = res.target;
-  }
-
-  // ensure you have enough loan rows visible
-  const existing = document.querySelectorAll('.loan').length;
-  const needed = (res.loans?.length || 0) - existing;
-  for (let i = 0; i < needed; i++) document.getElementById('add-loan').click();
-
-  // fill rows
-  const rows = [...document.querySelectorAll('.loan')];
-  (res.loans || []).forEach((l, i) => {
-    const row = rows[i];
-    if (!row) return;
-    row.querySelector('.loan-name').value = l.name ?? "";
-    row.querySelector('.loan-interest').value = l.interestRate ?? "";
-    row.querySelector('.loan-fee').value = l.feePct ?? "";
-    row.querySelector('.loan-cap').value = l.cap ?? "";
-    row.querySelector('.loan-term').value = l.termYears ?? "";
-    row.querySelector('.loan-accrual').value = l.accrualMonths ?? "";
-  });
 }
 
 async function requestExplanation(payload) {
-  const res = await fetch(`${API_BASE}/api/explain`, {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify(payload)
-  }).then(r => r.json()).catch(()=>({ error:"Network error" }));
+  try {
+    const res = await fetch(`${API_BASE}/api/explain`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    console.log("Explain response:", data);
 
-  const card = document.getElementById('explain');
-  const p = document.getElementById('explanation-text');
-  if (res.explanation) {
+    const card = document.getElementById('explain');
+    const p = document.getElementById('explanation-text');
     card.hidden = false;
-    p.textContent = res.explanation;
-  } else {
+    p.textContent = data.explanation || "Explanation unavailable right now.";
+  } catch (e) {
+    console.error("Explain error:", e);
+    const card = document.getElementById('explain');
+    const p = document.getElementById('explanation-text');
     card.hidden = false;
-    p.textContent = "Explanation unavailable right now.";
+    p.textContent = "Explanation unavailable right now (network/server error).";
   }
 }
 
+// ---------- UI helpers & optimization ----------
 function addLoanRow() {
   const t = $('#loan-row').content.cloneNode(true);
   t.querySelector('.remove-loan').addEventListener('click', e => {
@@ -74,19 +88,14 @@ function costPerDollar({interestRate, feePct, accrualMonths, termYears}) {
   const fee = (feePct || 0) / 100;
   const term = Math.max(1, termYears || 10);
   const months = Math.max(0, accrualMonths || 0);
-  // Origination fee increases amount owed at t0:
-  const principal_effective = 1 + fee;
 
-  // In-school simple interest (approx) on principal for months/12 at Interest Rate
-  const in_school_interest = rate * (months/12);
+  const principal_effective = 1 + fee;               // adds origination fee
+  const in_school_interest = rate * (months/12);     // simple accrual during school
+  const amortization_interest_factor = rate * term * 0.55; // amortization approximation
 
-  // Amortized repayment interest on (principal + accrued) across term
-  // Rough factor: total repaid ≈ principal * (1 + avg_rate * term)
-  // Using a conservative approximation (Interest Rate * term * 0.55) to mimic amortization curve,
-  // so it doesn't overstate like simple interest.
-  const amortization_interest_factor = rate * term * 0.55;
+  const total_factor =
+    principal_effective * (1 + in_school_interest) * (1 + amortization_interest_factor);
 
-  const total_factor = principal_effective * (1 + in_school_interest) * (1 + amortization_interest_factor);
   return total_factor; // dollars repaid per $1 borrowed
 }
 
@@ -172,10 +181,11 @@ function renderResults(allocation, target, feasible, shortfall) {
         : `You’re <strong>$${shortfall.toFixed(2)}</strong> short of the $${target.toFixed(2)} target given current caps.`}
     </p>
     <p>Estimated dollars repaid per $1 borrowed (blended): <strong>${blendedCPD.toFixed(3)}×</strong>.</p>
-    <p class="muted">Note: This MVP uses a simplified cost model and greedy allocation. You’ll improve this in the Python step.</p>
+    <p class="muted">Note: This MVP uses a simplified cost model and greedy allocation.</p>
   `;
 }
 
+// ---------- Wire up buttons after DOM is ready ----------
 document.addEventListener('DOMContentLoaded', () => {
   // seed with two example loans
   addLoanRow(); addLoanRow();
@@ -197,32 +207,36 @@ document.addEventListener('DOMContentLoaded', () => {
     $('.loan-accrual', l2).value = '24';
   }
 
+  // main buttons
   $('#add-loan').addEventListener('click', addLoanRow);
   $('#optimize').addEventListener('click', optimize);
-});
 
+  // AI buttons (now INSIDE DOMContentLoaded)
+  document.getElementById('btn-parse').addEventListener('click', parseFreeTextAndFill);
 
-document.getElementById('btn-parse').addEventListener('click', parseFreeTextAndFill);
   document.getElementById('btn-explain').addEventListener('click', async () => {
     const target = parseFloat(document.getElementById('target-amount').value || '0');
 
+    // read what’s already rendered into the table
     const allocation = [...document.querySelectorAll('#allocation-table tbody tr')].map(tr => {
       const tds = tr.querySelectorAll('td');
       return {
-        name: tds[0].textContent.trim(),
-        used: parseFloat(tds[1].textContent),
-        cpd: parseFloat(tds[6].textContent.replace('×',''))
+        name: tds[0]?.textContent?.trim() || "",
+        used: parseFloat(tds[1]?.textContent || "0"),
+        cpd: parseFloat((tds[6]?.textContent || "0").replace('×',''))
       };
     });
 
-    const blendedText = document.getElementById('summary').textContent;
-    const blendedMatch = blendedText.match(/Blended.*?([\d.]+)×/i);
+    // pull blendedCPD & feasibility from the summary text
+    const summaryText = document.getElementById('summary')?.textContent || "";
+    const blendedMatch = summaryText.match(/Blended.*?([\d.]+)×/i);
     const blendedCPD = blendedMatch ? parseFloat(blendedMatch[1]) : 0;
 
-    const feasible = !/Shortfall:/i.test(blendedText);
-    const shortfallMatch = blendedText.match(/Shortfall:\s*\$([\d,.]+)/i);
+    const feasible = !/Shortfall:/i.test(summaryText);
+    const shortfallMatch = summaryText.match(/Shortfall:\s*\$([\d,.]+)/i);
     const shortfall = shortfallMatch ? parseFloat(shortfallMatch[1].replace(/[,]/g,'')) : 0;
 
     await requestExplanation({ target, allocation, blendedCPD, feasible, shortfall });
   });
 });
+
