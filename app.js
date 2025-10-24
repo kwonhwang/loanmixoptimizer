@@ -1,10 +1,12 @@
 const $ = (sel, root=document)=>root.querySelector(sel);
 const $$ = (sel, root=document)=>[...root.querySelectorAll(sel)];
+
+// Use your Vercel domain (no trailing slash)
 const API_BASE = "https://loanmixoptimizer-git-main-kwon-hwangs-projects.vercel.app";
 
 // ---------- Front-end calls to API ----------
 async function parseFreeTextAndFill() {
-  const raw = document.getElementById('free-text').value || "";
+  const raw = $('#free-text').value || "";
   if (!raw.trim()) { alert("Paste some text first."); return; }
 
   try {
@@ -20,28 +22,32 @@ async function parseFreeTextAndFill() {
       alert("Parser notes:\n- " + data.errors.join("\n- "));
     }
 
-    // populate form fields (guard nulls)
-    if (typeof data.target === "number" && !Number.isNaN(data.target)) {
-      document.getElementById('target-amount').value = data.target;
+    // 1) Target amount (coerce to number)
+    const targetNum = Number(data.target);
+    if (Number.isFinite(targetNum)) {
+      $('#target-amount').value = targetNum;
     }
 
-    // ensure you have enough loan rows visible
-    const existing = document.querySelectorAll('.loan').length;
-    const needed = (data.loans?.length || 0) - existing;
-    for (let i = 0; i < needed; i++) document.getElementById('add-loan').click();
+    // 2) Ensure enough rows exist
+    const nLoans = Array.isArray(data.loans) ? data.loans.length : 0;
+    const existing = $$('.loan').length;
+    for (let i = 0; i < nLoans - existing; i++) $('#add-loan').click();
 
-    // fill rows
-    const rows = [...document.querySelectorAll('.loan')];
+    // 3) Fill rows safely
+    const rows = $$('.loan');
     (data.loans || []).forEach((l, i) => {
       const row = rows[i];
       if (!row) return;
-      row.querySelector('.loan-name').value = l?.name ?? "";
-      row.querySelector('.loan-interest').value = l?.interestRate ?? "";
-      row.querySelector('.loan-fee').value = l?.feePct ?? "";
-      row.querySelector('.loan-cap').value = l?.cap ?? "";
-      row.querySelector('.loan-term').value = l?.termYears ?? "";
-      row.querySelector('.loan-accrual').value = l?.accrualMonths ?? "";
+      $('.loan-name', row).value       = l?.name ?? "";
+      $('.loan-interest', row).value   = Number(l?.interestRate ?? "") || "";
+      $('.loan-fee', row).value        = Number(l?.feePct ?? "") || "";
+      $('.loan-cap', row).value        = Number(l?.cap ?? "") || "";
+      $('.loan-term', row).value       = Number(l?.termYears ?? "") || "";
+      $('.loan-accrual', row).value    = Number(l?.accrualMonths ?? "") || "";
     });
+
+    // Focus the optimize button to guide the next action
+    $('#optimize').focus();
 
   } catch (e) {
     console.error("Parse error:", e);
@@ -59,14 +65,14 @@ async function requestExplanation(payload) {
     const data = await res.json();
     console.log("Explain response:", data);
 
-    const card = document.getElementById('explain');
-    const p = document.getElementById('explanation-text');
+    const card = $('#explain');
+    const p = $('#explanation-text');
     card.hidden = false;
     p.textContent = data.explanation || "Explanation unavailable right now.";
   } catch (e) {
     console.error("Explain error:", e);
-    const card = document.getElementById('explain');
-    const p = document.getElementById('explanation-text');
+    const card = $('#explain');
+    const p = $('#explanation-text');
     card.hidden = false;
     p.textContent = "Explanation unavailable right now (network/server error).";
   }
@@ -81,8 +87,7 @@ function addLoanRow() {
   $('#loans').appendChild(t);
 }
 
-// Simplified cost model: estimates total dollars repaid per dollar borrowed
-// Includes orig fee, in-school accrual interest (simple), and term amortization (Interest Rate approx)
+// Cost-per-dollar (simplified heuristic): dollars repaid per $1 borrowed
 function costPerDollar({interestRate, feePct, accrualMonths, termYears}) {
   const rate = (interestRate || 0) / 100;
   const fee = (feePct || 0) / 100;
@@ -93,10 +98,7 @@ function costPerDollar({interestRate, feePct, accrualMonths, termYears}) {
   const in_school_interest = rate * (months/12);     // simple accrual during school
   const amortization_interest_factor = rate * term * 0.55; // amortization approximation
 
-  const total_factor =
-    principal_effective * (1 + in_school_interest) * (1 + amortization_interest_factor);
-
-  return total_factor; // dollars repaid per $1 borrowed
+  return principal_effective * (1 + in_school_interest) * (1 + amortization_interest_factor);
 }
 
 function readLoans() {
@@ -123,7 +125,7 @@ function optimize() {
     return;
   }
 
-  // Rank by cost per dollar (lower is better)
+  // Greedy heuristic: allocate cheapest first by cost-per-dollar
   loans.forEach(l => l.cpd = costPerDollar(l));
   loans.sort((a,b)=> a.cpd - b.cpd);
 
@@ -136,11 +138,7 @@ function optimize() {
     need -= use;
   }
 
-  if (need > 0) {
-    renderResults(allocation, target, false, need);
-    return;
-  }
-  renderResults(allocation, target, true, 0);
+  renderResults(allocation, target, need <= 0, Math.max(0, need));
 }
 
 function renderResults(allocation, target, feasible, shortfall) {
@@ -184,14 +182,13 @@ function renderResults(allocation, target, feasible, shortfall) {
     <p class="muted">Note: This MVP uses a simplified cost model and greedy allocation.</p>
   `;
 
-  
-  // Enable "Explain this plan" button now that results exist
-  document.getElementById('btn-explain').disabled = false;
+  // Enable "Explain this plan" now that results exist
+  $('#btn-explain').disabled = false;
 }
 
 // ---------- Wire up buttons after DOM is ready ----------
 document.addEventListener('DOMContentLoaded', () => {
-  // seed with two example loans
+  // Seed two example loans
   addLoanRow(); addLoanRow();
   const [l1, l2] = $$('.loan');
   if (l1) {
@@ -200,7 +197,7 @@ document.addEventListener('DOMContentLoaded', () => {
     $('.loan-fee', l1).value = '1.057';
     $('.loan-cap', l1).value = '5500';
     $('.loan-term', l1).value = '10';
-    $('.loan-accrual', l1).value = '0'; // subsidized (approx)
+    $('.loan-accrual', l1).value = '0';
   }
   if (l2) {
     $('.loan-name', l2).value = 'Direct Unsubsidized';
@@ -211,17 +208,16 @@ document.addEventListener('DOMContentLoaded', () => {
     $('.loan-accrual', l2).value = '24';
   }
 
-  // main buttons
+  // Buttons
   $('#add-loan').addEventListener('click', addLoanRow);
   $('#optimize').addEventListener('click', optimize);
+  $('#btn-parse').addEventListener('click', parseFreeTextAndFill);
 
-  // AI buttons (now INSIDE DOMContentLoaded)
-  document.getElementById('btn-parse').addEventListener('click', parseFreeTextAndFill);
+  // Explain button: collect rendered results and send for explanation
+  $('#btn-explain').addEventListener('click', async () => {
+    const target = parseFloat($('#target-amount').value || '0');
 
-  document.getElementById('btn-explain').addEventListener('click', async () => {
-    const target = parseFloat(document.getElementById('target-amount').value || '0');
-
-    // read what’s already rendered into the table
+    // Read current table to construct payload
     const allocation = [...document.querySelectorAll('#allocation-table tbody tr')].map(tr => {
       const tds = tr.querySelectorAll('td');
       return {
@@ -231,8 +227,7 @@ document.addEventListener('DOMContentLoaded', () => {
       };
     });
 
-    // pull blendedCPD & feasibility from the summary text
-    const summaryText = document.getElementById('summary')?.textContent || "";
+    const summaryText = $('#summary')?.textContent || "";
     const blendedMatch = summaryText.match(/Blended.*?([\d.]+)×/i);
     const blendedCPD = blendedMatch ? parseFloat(blendedMatch[1]) : 0;
 
@@ -243,4 +238,3 @@ document.addEventListener('DOMContentLoaded', () => {
     await requestExplanation({ target, allocation, blendedCPD, feasible, shortfall });
   });
 });
-
