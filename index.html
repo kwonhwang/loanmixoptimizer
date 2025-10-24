@@ -3,16 +3,28 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>AI Loan Mix Optimizer</title>
+  <title>AI Assistant for Loan Mix Optimization</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
 <header>
-  <h1>AI Loan Mix Optimizer</h1>
-  <p>Compare loan options and find a low-cost mix to cover your need.</p>
+  <h1>AI Assistant for Loan Mix Optimization</h1>
+  <p>Paste your details or fill the form, then optimize the lowest-cost loan mix.</p>
 </header>
 
 <main>
+
+  <!-- 1) Free-text first: parse to pre-fill the form -->
+  <section class="card">
+    <h2>Paste your loan details</h2>
+    <textarea id="free-text" rows="5" placeholder="Example:
+I need $28,000. Direct Unsubsidized 8.05% fee 1.057% cap 12000; PLUS 9.1% fee 4.228% cap 20000; 24 months in-school; 10 year term."></textarea>
+    <div class="actions mt">
+      <button id="btn-parse" type="button">Fill the form from this text</button>
+    </div>
+  </section>
+  
+  <!-- 2) Amount to finance -->
   <section class="card">
     <h2>Amount to Finance</h2>
     <label>Target Amount ($)
@@ -20,6 +32,7 @@
     </label>
   </section>
 
+ <!-- 3) Loan options table -->
   <section class="card">
     <div class="row header">
       <h2>Loan Options</h2>
@@ -40,7 +53,7 @@
             <input type="number" class="loan-fee" min="0" step="0.01" placeholder="1.057" />
           </label>
           <label>Borrowing Cap ($)
-            <input type="number" class="loan-cap" min="0" step="0.01" placeholder="5500" />
+            <input type="number" class="loan-cap" min="0" step="0.01" placeholder="20500" />
           </label>
           <label>Repayment Term (years)
             <input type="number" class="loan-term" min="1" step="1" placeholder="10" />
@@ -54,33 +67,26 @@
     </template>
   </section>
 
-  <section class="card">
-  <h2>Optional: Paste your loan details</h2>
-  <textarea id="free-text" rows="5" placeholder="Example:
-I need $28,000. Direct Unsubsidized 8.05% fee 1.057% cap 12000; PLUS 9.1% fee 4.228% cap 20000; 24 months in-school; 10 year term."></textarea>
-  <div style="margin-top:.5rem;">
-    <button id="btn-parse" type="button">Fill the form from this text</button>
-  </div>
-</section>
-
+  <!-- 4) Optimize -->
   <section class="card actions">
     <button id="optimize" type="button">Optimize Mix</button>
   </section>
 
-  <section id="results" class="card" hidden>
+  
+   <!-- 5) Results -->
+  <section id="results" class="card" hidden aria-live="polite">
     <h2>Results</h2>
     <div id="allocation-table"></div>
     <div id="summary"></div>
+    <div class="actions mt">
+      <button id="btn-explain" type="button" disabled>Explain this plan</button>
+    </div>
   </section>
   
-<!-- After your results section, add an Explain button (or place it inside results) -->
-<section class="card">
-  <button id="btn-explain" type="button" disabled>Explain this plan</button>
-</section>
-  
-  <section id="explain" class="card" hidden>
+<!-- 6) Explanation -->
+  <section id="explain" class="card" hidden aria-live="polite">
     <h2>Explanation</h2>
-    <p id="explanation-text">Coming soon (GPT integration).</p>
+    <p id="explanation-text">—</p>
   </section>
 </main>
 
