@@ -183,6 +183,10 @@ function renderResults(allocation, target, feasible, shortfall) {
     <p>Estimated dollars repaid per $1 borrowed (blended): <strong>${blendedCPD.toFixed(3)}×</strong>.</p>
     <p class="muted">Note: This MVP uses a simplified cost model and greedy allocation.</p>
   `;
+
+  
+  // Enable "Explain this plan" button now that results exist
+  document.getElementById('btn-explain').disabled = false;
 }
 
 // ---------- Wire up buttons after DOM is ready ----------
