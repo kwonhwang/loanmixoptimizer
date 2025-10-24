@@ -3,7 +3,7 @@
 
 function setCORS(res) {
   // TODO: set to your real GitHub Pages origin (scheme + host only)
-  res.setHeader("Access-Control-Allow-Origin", "https://YOUR_GH_PAGES_ORIGIN");
+  res.setHeader("Access-Control-Allow-Origin", "https://kwonhwang.github.io");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 }
