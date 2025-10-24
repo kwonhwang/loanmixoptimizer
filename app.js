@@ -1,6 +1,6 @@
 const $ = (sel, root=document)=>root.querySelector(sel);
 const $$ = (sel, root=document)=>[...root.querySelectorAll(sel)];
-const API_BASE = "https://loanmixoptimizer-kwon-hwangs-projects.vercel.app";
+const API_BASE = "https://loanmixoptimizer-git-main-kwon-hwangs-projects.vercel.app";
 
 // ---------- Front-end calls to API ----------
 async function parseFreeTextAndFill() {
