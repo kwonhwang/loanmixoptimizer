@@ -48,6 +48,9 @@ Rules:
 Text:
 """${text}"""`.trim();
 
+    // Use a widely available model to avoid model access errors
+    const MODEL = "gpt-4o-mini";
+
     const r = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
@@ -55,7 +58,7 @@ Text:
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "gpt-5.1-mini",
+        model: "MODEL",
         input: prompt,
         response_format: { type: "json_object" }
       })
@@ -64,7 +67,16 @@ Text:
     const data = await r.json();
     if (!r.ok) {
       console.error("OpenAI error", { status: r.status, data });
-      return res.status(502).json({ errors: ["Upstream AI error. Check function logs."] });
+      const msg = typeof data?.error === "string"
+        ? data.error
+        : (data?.error?.message || JSON.stringify(data));
+      return res.status(502).json({
+        errors: [
+          "Upstream AI error.",
+          `status=${r.status}`,
+          `detail=${(msg || "").slice(0, 300)}`
+        ]
+      });
     }
 
     const raw = data?.output?.[0]?.content?.[0]?.text ?? "{}";
