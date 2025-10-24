@@ -35,7 +35,7 @@ Cover: ordering rationale (interest rate, fees, caps, term), blended cost-per-do
 
     const MODEL = "gpt-4o-mini";
 
-    const r = await fetch("https://api.openai.com/v1/responses", {
+    const r = await fetch("https://api.openai.com/v1/completions", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
@@ -50,13 +50,12 @@ Cover: ordering rationale (interest rate, fees, caps, term), blended cost-per-do
     const data = await r.json();
    if (!r.ok) {
       console.error("OpenAI error", { status: r.status, data });
-      const msg = typeof data?.error === "string"
-        ? data.error
-        : (data?.error?.message || JSON.stringify(data));
+       const msg = data?.error?.message || JSON.stringify(data);
       return res.status(502).json({
-        error: `Upstream AI error. status=${r.status} detail=${(msg || "").slice(0, 300)}`
+        error: `Upstream AI error. status=${r.status} detail=${(msg || "").slice(0,300)}`
       });
     }
+
 
     const text = data?.output?.[0]?.content?.[0]?.text ?? "No explanation available.";
     return res.status(200).json({ explanation: text });
