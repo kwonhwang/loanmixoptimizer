@@ -33,6 +33,8 @@ Write 4–6 concise bullet points. Be precise, avoid personal advice.
 Cover: ordering rationale (interest rate, fees, caps, term), blended cost-per-dollar, key trade-offs, and one common what-if.`;
     const user = JSON.stringify({ target, allocation, blendedCPD, feasible, shortfall });
 
+    const MODEL = "gpt-4o-mini";
+
     const r = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
@@ -40,15 +42,20 @@ Cover: ordering rationale (interest rate, fees, caps, term), blended cost-per-do
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "gpt-5.1-mini",
+        model: MODEL,
         input: [{ role: "system", content: system }, { role: "user", content: user }]
       })
     });
 
     const data = await r.json();
-    if (!r.ok) {
+   if (!r.ok) {
       console.error("OpenAI error", { status: r.status, data });
-      return res.status(502).json({ error: "Upstream AI error. Check function logs." });
+      const msg = typeof data?.error === "string"
+        ? data.error
+        : (data?.error?.message || JSON.stringify(data));
+      return res.status(502).json({
+        error: `Upstream AI error. status=${r.status} detail=${(msg || "").slice(0, 300)}`
+      });
     }
 
     const text = data?.output?.[0]?.content?.[0]?.text ?? "No explanation available.";
