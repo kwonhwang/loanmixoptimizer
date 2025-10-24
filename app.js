@@ -15,6 +15,14 @@ async function parseFreeTextAndFill() {
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({ text: raw })
     });
+
+    // Show readable errors if the function returns a non-200
+    if (!res.ok) {
+      const err = await safeReadJson(res);
+      const msg = Array.isArray(err?.errors) ? err.errors.join(" | ") : JSON.stringify(err);
+      throw new Error(`Server ${res.status}: ${msg}`);
+    }
+    
     const data = await res.json();
     console.log("Parse response:", data);
 
