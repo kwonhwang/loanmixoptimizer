@@ -1,7 +1,6 @@
 // api/parse.js — Free-text → structured JSON with CORS + robust body parsing
 
 function setCORS(res) {
-  // Your site origin (scheme + host only; no trailing slash)
   res.setHeader("Access-Control-Allow-Origin", "https://kwonhwang.github.io");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
@@ -36,50 +35,49 @@ export default async function handler(req, res) {
       errors: []
     };
 
-    const prompt = `
-Extract ONLY a JSON object matching this exact schema:
+    const system = `
+You convert messy user text about loans into a strict JSON object.
+Return ONLY a JSON object that matches this schema (no extra keys, no commentary):
 ${JSON.stringify(schemaHint, null, 2)}
 
 Rules:
 - Use numbers (not strings) for numeric fields.
-- If a value is missing/ambiguous, set it to null and push a short note into "errors".
-- Output ONLY JSON (no extra commentary).
+- If a value is missing/ambiguous, set it to null and add a short message to "errors".
+`.trim();
 
-Text:
-"""${text}"""`.trim();
+    const user = `Text:\n"""${text}"""`;
 
-    // Use a widely available model to avoid model access errors
+    // Use Chat Completions with JSON mode
     const MODEL = "gpt-4o-mini";
-
-    const r = await fetch("https://api.openai.com/v1/responses", {
+    const r = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "MODEL",
-        input: prompt,
-        response_format: { type: "json_object" }
+        model: MODEL,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user }
+        ]
       })
     });
 
     const data = await r.json();
+
     if (!r.ok) {
       console.error("OpenAI error", { status: r.status, data });
-      const msg = typeof data?.error === "string"
-        ? data.error
-        : (data?.error?.message || JSON.stringify(data));
+      const msg = data?.error?.message || JSON.stringify(data);
       return res.status(502).json({
-        errors: [
-          "Upstream AI error.",
-          `status=${r.status}`,
-          `detail=${(msg || "").slice(0, 300)}`
-        ]
+        errors: ["Upstream AI error.", `status=${r.status}`, `detail=${(msg || "").slice(0,300)}`]
       });
     }
 
-    const raw = data?.output?.[0]?.content?.[0]?.text ?? "{}";
+    // JSON mode returns JSON string in message.content
+    const raw = data?.choices?.[0]?.message?.content ?? "{}";
+
     let parsed;
     try { parsed = JSON.parse(raw); }
     catch (e) {
@@ -87,6 +85,7 @@ Text:
       return res.status(422).json({ errors: ["Invalid JSON from parser. Try a simpler sentence."] });
     }
 
+    
     // Normalize shape & types
     const out = {
       target: Number(parsed?.target),
