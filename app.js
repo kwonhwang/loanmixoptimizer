@@ -1,7 +1,5 @@
 const $ = (sel, root=document)=>root.querySelector(sel);
 const $$ = (sel, root=document)=>[...root.querySelectorAll(sel)];
-
-// Use your Vercel domain (no trailing slash)
 const API_BASE = "https://loanmixoptimizer.vercel.app";
 
 // ---------- Front-end calls to API ----------
@@ -59,8 +57,12 @@ async function parseFreeTextAndFill() {
 
   } catch (e) {
     console.error("Parse error:", e);
-    alert("Network/server error while parsing. Check API_BASE URL and CORS on your Vercel function.");
+    alert("Parsing failed: " + (e?.message || "Network/server error. Check API_BASE URL and CORS on your Vercel function."));
   }
+}
+
+async function safeReadJson(res) {
+  try { return await res.json(); } catch { return {}; }
 }
 
 async function requestExplanation(payload) {
@@ -70,6 +72,13 @@ async function requestExplanation(payload) {
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify(payload)
     });
+
+    if (!res.ok) {
+      const err = await safeReadJson(res);
+      const msg = err?.error || JSON.stringify(err);
+      throw new Error(`Server ${res.status}: ${msg}`);
+    }
+
     const data = await res.json();
     console.log("Explain response:", data);
 
