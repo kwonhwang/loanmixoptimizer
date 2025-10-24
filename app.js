@@ -1,5 +1,63 @@
 const $ = (sel, root=document)=>root.querySelector(sel);
 const $$ = (sel, root=document)=>[...root.querySelectorAll(sel)];
+const API_BASE = "https://loanmixoptimizer-kwon-hwangs-projects.vercel.app/";
+
+// front-end calls to API
+async function parseFreeTextAndFill() {
+  const raw = document.getElementById('free-text').value || "";
+  if (!raw.trim()) { alert("Paste some text first."); return; }
+
+  const res = await fetch(`${API_BASE}/api/parse`, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ text: raw })
+  }).then(r => r.json()).catch(()=>({ errors:["Network error"] }));
+
+  if (res.errors?.length) {
+    alert("Parser notes:\n- " + res.errors.join("\n- "));
+  }
+
+  // populate form fields (guard nulls)
+  if (typeof res.target === "number" && !Number.isNaN(res.target)) {
+    document.getElementById('target-amount').value = res.target;
+  }
+
+  // ensure you have enough loan rows visible
+  const existing = document.querySelectorAll('.loan').length;
+  const needed = (res.loans?.length || 0) - existing;
+  for (let i = 0; i < needed; i++) document.getElementById('add-loan').click();
+
+  // fill rows
+  const rows = [...document.querySelectorAll('.loan')];
+  (res.loans || []).forEach((l, i) => {
+    const row = rows[i];
+    if (!row) return;
+    row.querySelector('.loan-name').value = l.name ?? "";
+    row.querySelector('.loan-interest').value = l.interestRate ?? "";
+    row.querySelector('.loan-fee').value = l.feePct ?? "";
+    row.querySelector('.loan-cap').value = l.cap ?? "";
+    row.querySelector('.loan-term').value = l.termYears ?? "";
+    row.querySelector('.loan-accrual').value = l.accrualMonths ?? "";
+  });
+}
+
+async function requestExplanation(payload) {
+  const res = await fetch(`${API_BASE}/api/explain`, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(payload)
+  }).then(r => r.json()).catch(()=>({ error:"Network error" }));
+
+  const card = document.getElementById('explain');
+  const p = document.getElementById('explanation-text');
+  if (res.explanation) {
+    card.hidden = false;
+    p.textContent = res.explanation;
+  } else {
+    card.hidden = false;
+    p.textContent = "Explanation unavailable right now.";
+  }
+}
 
 function addLoanRow() {
   const t = $('#loan-row').content.cloneNode(true);
@@ -141,4 +199,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
   $('#add-loan').addEventListener('click', addLoanRow);
   $('#optimize').addEventListener('click', optimize);
+});
+
+
+document.getElementById('btn-parse').addEventListener('click', parseFreeTextAndFill);
+  document.getElementById('btn-explain').addEventListener('click', async () => {
+    const target = parseFloat(document.getElementById('target-amount').value || '0');
+
+    const allocation = [...document.querySelectorAll('#allocation-table tbody tr')].map(tr => {
+      const tds = tr.querySelectorAll('td');
+      return {
+        name: tds[0].textContent.trim(),
+        used: parseFloat(tds[1].textContent),
+        cpd: parseFloat(tds[6].textContent.replace('×',''))
+      };
+    });
+
+    const blendedText = document.getElementById('summary').textContent;
+    const blendedMatch = blendedText.match(/Blended.*?([\d.]+)×/i);
+    const blendedCPD = blendedMatch ? parseFloat(blendedMatch[1]) : 0;
+
+    const feasible = !/Shortfall:/i.test(blendedText);
+    const shortfallMatch = blendedText.match(/Shortfall:\s*\$([\d,.]+)/i);
+    const shortfall = shortfallMatch ? parseFloat(shortfallMatch[1].replace(/[,]/g,'')) : 0;
+
+    await requestExplanation({ target, allocation, blendedCPD, feasible, shortfall });
+  });
 });
