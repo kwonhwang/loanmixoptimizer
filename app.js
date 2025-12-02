@@ -1,6 +1,5 @@
 // app.js
-// TODO: change this once you deploy your Cloudflare Worker
-const API_BASE = "https://your-worker-subdomain.workers.dev"; 
+const API_BASE = "https://loanmixoptimizer.kwonhwan.workers.dev"; 
 
 let lastPlan = null; // store last optimization result for explanation
 
