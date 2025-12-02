@@ -1,7 +1,7 @@
 // app.js
 const API_BASE = "https://loanmixoptimizer.kwonhwan.workers.dev"; 
 
-let lastPlan = null; // store last optimization result for explanation
+let lastPlan = null; // stores the last optimization result for explanation
 
 document.addEventListener("DOMContentLoaded", () => {
   const loansContainer = document.getElementById("loans");
@@ -18,7 +18,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const explainSection = document.getElementById("explain");
   const explanationText = document.getElementById("explanation-text");
 
-  // --- helpers to create/remove loan rows ---
+  // -------------------------------
+  // Helpers to create/remove loan rows
+  // -------------------------------
   function addLoanRow(prefill = {}) {
     const clone = loanTemplate.content.cloneNode(true);
     const fieldset = clone.querySelector("fieldset.loan");
@@ -54,7 +56,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   btnAddLoan.addEventListener("click", () => addLoanRow());
 
-  // --- read data from form into JS objects ---
+  // -------------------------------
+  // Read data from form into JS objects
+  // -------------------------------
   function readLoansFromForm() {
     const loanFieldsets = loansContainer.querySelectorAll("fieldset.loan");
     const loans = [];
@@ -80,19 +84,23 @@ document.addEventListener("DOMContentLoaded", () => {
         name: name || "Loan",
         interestRatePercent,
         originationFeePercent,
-        borrowingCap: isNaN(borrowingCap) || borrowingCap <= 0 ? null : borrowingCap,
-        repaymentTermYears: isNaN(repaymentTermYears) || repaymentTermYears <= 0
-          ? null
-          : repaymentTermYears,
-        inSchoolMonths: isNaN(inSchoolMonths) || inSchoolMonths < 0
-          ? null
-          : inSchoolMonths,
+        borrowingCap:
+          isNaN(borrowingCap) || borrowingCap <= 0 ? null : borrowingCap,
+        repaymentTermYears:
+          isNaN(repaymentTermYears) || repaymentTermYears <= 0
+            ? null
+            : repaymentTermYears,
+        inSchoolMonths:
+          isNaN(inSchoolMonths) || inSchoolMonths < 0 ? null : inSchoolMonths,
       });
     });
     return loans;
   }
 
-  // simple greedy optimizer: fill lowest interest loans first up to caps
+  // -------------------------------
+  // Simple greedy optimizer:
+  // fill lowest interest loans first up to their caps
+  // -------------------------------
   function optimizeMix(targetAmount, loans) {
     const sorted = [...loans].sort(
       (a, b) => (a.interestRatePercent || 0) - (b.interestRatePercent || 0)
@@ -117,7 +125,7 @@ document.addEventListener("DOMContentLoaded", () => {
         originationFeePercent: loan.originationFeePercent,
         amountPrincipal: amount,
         feeAmount: fee,
-        totalBorrowed: amount, // principal
+        totalBorrowed: amount,
         totalFees: fee,
       });
 
@@ -131,6 +139,9 @@ document.addEventListener("DOMContentLoaded", () => {
     };
   }
 
+  // -------------------------------
+  // Render results into the DOM
+  // -------------------------------
   function renderResults(plan) {
     if (!plan) return;
 
@@ -141,7 +152,7 @@ document.addEventListener("DOMContentLoaded", () => {
       0
     );
 
-    // table
+    // Table
     let html = "";
     if (plan.allocation.length === 0) {
       html = "<p>No allocations found. Check your target and loan caps.</p>";
@@ -150,7 +161,7 @@ document.addEventListener("DOMContentLoaded", () => {
         <thead>
           <tr>
             <th>Loan</th>
-            <th>Interest Rate</th>
+            <th>Interest Rate</br>(APR)</th>
             <th>Principal</th>
             <th>Origination Fee</th>
             <th>% of Principal</th>
@@ -164,7 +175,7 @@ document.addEventListener("DOMContentLoaded", () => {
           : "0.0";
         html += `<tr>
           <td>${a.name}</td>
-          <td>${a.interestRatePercent?.toFixed(2) || "—"}%</td>
+          <td>${a.interestRatePercent != null ? a.interestRatePercent.toFixed(2) : "—"}%</td>
           <td>$${a.amountPrincipal.toLocaleString(undefined, {
             maximumFractionDigits: 2,
           })}</td>
@@ -180,7 +191,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     allocationTableDiv.innerHTML = html;
 
-    // summary text
+    // Summary text
     let summaryHtml = `<p>Target amount to finance: <strong>$${plan.targetAmount.toLocaleString(
       undefined,
       { maximumFractionDigits: 2 }
@@ -203,11 +214,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
     summaryDiv.innerHTML = summaryHtml;
 
-    // enable "Explain this plan" (GPT call will be wired later)
+    // Enable "Explain this plan"
     btnExplain.disabled = false;
   }
 
-  // --- click: Optimize Mix (local only for now) ---
+  // -------------------------------
+  // Optimize Mix click handler
+  // -------------------------------
   btnOptimize.addEventListener("click", () => {
     const targetInput = document.getElementById("target-amount");
     const targetAmount = parseFloat(targetInput.value || "0");
@@ -233,7 +246,9 @@ document.addEventListener("DOMContentLoaded", () => {
     renderResults(plan);
   });
 
-  // --- click: Fill the form from this text (GPT later) ---
+  // -------------------------------
+  // Fill the form from free-text (calls /parse)
+  // -------------------------------
   btnParse.addEventListener("click", async () => {
     const text = document.getElementById("free-text").value.trim();
     if (!text) {
@@ -241,20 +256,102 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    // For now, just stub; we'll wire GPT/Cloudflare in the next step
-    alert(
-      "AI parsing is not wired yet. Once the Cloudflare Worker is set up, this will call GPT to fill the form."
-    );
+    btnParse.disabled = true;
+    btnParse.textContent = "Parsing...";
+
+    try {
+      const res = await fetch(`${API_BASE}/parse`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ freeText: text }),
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        console.error("Parse error:", err);
+        alert("Error parsing with AI. Check console for details.");
+        return;
+      }
+
+      const data = await res.json();
+      const { target_amount, loans, notes } = data;
+
+      // Fill target amount
+      if (target_amount != null) {
+        document.getElementById("target-amount").value = target_amount;
+      }
+
+      // Clear current loans and add AI-parsed ones
+      loansContainer.innerHTML = "";
+      if (Array.isArray(loans) && loans.length > 0) {
+        loans.forEach((loan) => {
+          addLoanRow({
+            name: loan.name,
+            interestRatePercent: loan.interest_rate_percent,
+            originationFeePercent: loan.origination_fee_percent,
+            borrowingCap: loan.borrowing_cap,
+            repaymentTermYears: loan.repayment_term_years,
+            inSchoolMonths: loan.in_school_months,
+          });
+        });
+      } else {
+        addLoanRow();
+      }
+
+      if (notes) {
+        alert("AI notes:\n\n" + notes);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Unexpected error during AI parsing.");
+    } finally {
+      btnParse.disabled = false;
+      btnParse.textContent = "Fill the form from this text";
+    }
   });
 
-  // --- click: Explain this plan (GPT later) ---
+  // -------------------------------
+  // Explain this plan (calls /explain)
+  // -------------------------------
   btnExplain.addEventListener("click", async () => {
-    if (!lastPlan) {
-      return;
+    if (!lastPlan) return;
+
+    btnExplain.disabled = true;
+    btnExplain.textContent = "Explaining...";
+
+    try {
+      const res = await fetch(`${API_BASE}/explain`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetAmount: lastPlan.targetAmount,
+          loans: lastPlan.loans,
+          plan: lastPlan.plan,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        console.error("Explain error:", err);
+        explanationText.textContent =
+          "There was an error generating the explanation. Please try again.";
+        explainSection.hidden = false;
+        return;
+      }
+
+      const data = await res.json();
+      const explanation = data.explanation || JSON.stringify(data);
+
+      explanationText.textContent = explanation;
+      explainSection.hidden = false;
+    } catch (err) {
+      console.error(err);
+      explanationText.textContent =
+        "Unexpected error generating explanation. Please try again.";
+      explainSection.hidden = false;
+    } finally {
+      btnExplain.disabled = false;
+      btnExplain.textContent = "Explain this plan";
     }
-    // For now, just show a placeholder explanation
-    explainSection.hidden = false;
-    explanationText.textContent =
-      "Explanation coming soon. Once the Cloudflare Worker is connected to GPT, this button will send your plan for a concise narrative summary.";
   });
 });
