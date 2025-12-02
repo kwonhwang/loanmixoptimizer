@@ -1,228 +1,447 @@
 // app.js
 const API_BASE = "https://loanmixoptimizer.kwonhwan.workers.dev"; 
 
-let lastPlan = null; // stores the last optimization result for explanation
+// --- DOM helpers ---
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
-document.addEventListener("DOMContentLoaded", () => {
-  const loansContainer = document.getElementById("loans");
-  const loanTemplate = document.getElementById("loan-row");
-  const btnAddLoan = document.getElementById("add-loan");
-  const btnOptimize = document.getElementById("optimize");
-  const btnParse = document.getElementById("btn-parse");
-  const btnExplain = document.getElementById("btn-explain");
+// ------------------------------------
+// Add / remove loan rows
+// ------------------------------------
+function addLoanRow(prefill = {}) {
+  const template = $("#loan-row");
+  const loansContainer = $("#loans");
+  const clone = template.content.cloneNode(true);
+  const fieldset = clone.querySelector("fieldset.loan");
 
-  const resultsSection = document.getElementById("results");
-  const allocationTableDiv = document.getElementById("allocation-table");
-  const summaryDiv = document.getElementById("summary");
+  const nameInput = fieldset.querySelector(".loan-name");
+  const interestInput = fieldset.querySelector(".loan-interest");
+  const feeInput = fieldset.querySelector(".loan-fee");
+  const capInput = fieldset.querySelector(".loan-cap");
+  const termInput = fieldset.querySelector(".loan-term");
+  const accrualInput = fieldset.querySelector(".loan-accrual");
 
-  const explainSection = document.getElementById("explain");
-  const explanationText = document.getElementById("explanation-text");
+  if (prefill.name) nameInput.value = prefill.name;
+  if (prefill.interestRatePercent != null)
+    interestInput.value = prefill.interestRatePercent;
+  if (prefill.originationFeePercent != null)
+    feeInput.value = prefill.originationFeePercent;
+  if (prefill.borrowingCap != null) capInput.value = prefill.borrowingCap;
+  if (prefill.repaymentTermYears != null)
+    termInput.value = prefill.repaymentTermYears;
+  if (prefill.inSchoolMonths != null)
+    accrualInput.value = prefill.inSchoolMonths;
 
-  // -------------------------------
-  // Helpers to create/remove loan rows
-  // -------------------------------
-  function addLoanRow(prefill = {}) {
-    const clone = loanTemplate.content.cloneNode(true);
-    const fieldset = clone.querySelector("fieldset.loan");
+  const removeBtn = fieldset.querySelector(".remove-loan");
+  removeBtn.addEventListener("click", () => fieldset.remove());
 
-    const nameInput = fieldset.querySelector(".loan-name");
-    const interestInput = fieldset.querySelector(".loan-interest");
-    const feeInput = fieldset.querySelector(".loan-fee");
-    const capInput = fieldset.querySelector(".loan-cap");
-    const termInput = fieldset.querySelector(".loan-term");
-    const accrualInput = fieldset.querySelector(".loan-accrual");
+  loansContainer.appendChild(clone);
+}
 
-    if (prefill.name) nameInput.value = prefill.name;
-    if (prefill.interestRatePercent != null)
-      interestInput.value = prefill.interestRatePercent;
-    if (prefill.originationFeePercent != null)
-      feeInput.value = prefill.originationFeePercent;
-    if (prefill.borrowingCap != null) capInput.value = prefill.borrowingCap;
-    if (prefill.repaymentTermYears != null)
-      termInput.value = prefill.repaymentTermYears;
-    if (prefill.inSchoolMonths != null)
-      accrualInput.value = prefill.inSchoolMonths;
-
-    const removeBtn = fieldset.querySelector(".remove-loan");
-    removeBtn.addEventListener("click", () => {
-      fieldset.remove();
-    });
-
-    loansContainer.appendChild(clone);
-  }
-
-  // Start with one blank loan row
-  addLoanRow();
-
-  btnAddLoan.addEventListener("click", () => addLoanRow());
-
-  // -------------------------------
-  // Read data from form into JS objects
-  // -------------------------------
-  function readLoansFromForm() {
-    const loanFieldsets = loansContainer.querySelectorAll("fieldset.loan");
-    const loans = [];
-    loanFieldsets.forEach((fs) => {
-      const name = fs.querySelector(".loan-name").value.trim();
-      const interestRatePercent = parseFloat(
-        fs.querySelector(".loan-interest").value || "0"
-      );
-      const originationFeePercent = parseFloat(
-        fs.querySelector(".loan-fee").value || "0"
-      );
-      const borrowingCap = parseFloat(
-        fs.querySelector(".loan-cap").value || "0"
-      );
-      const repaymentTermYears = parseFloat(
-        fs.querySelector(".loan-term").value || "0"
-      );
-      const inSchoolMonths = parseFloat(
-        fs.querySelector(".loan-accrual").value || "0"
-      );
-
-      loans.push({
-        name: name || "Loan",
-        interestRatePercent,
-        originationFeePercent,
-        borrowingCap:
-          isNaN(borrowingCap) || borrowingCap <= 0 ? null : borrowingCap,
-        repaymentTermYears:
-          isNaN(repaymentTermYears) || repaymentTermYears <= 0
-            ? null
-            : repaymentTermYears,
-        inSchoolMonths:
-          isNaN(inSchoolMonths) || inSchoolMonths < 0 ? null : inSchoolMonths,
-      });
-    });
-    return loans;
-  }
-
-  // -------------------------------
-  // Simple greedy optimizer:
-  // fill lowest interest loans first up to their caps
-  // -------------------------------
-  function optimizeMix(targetAmount, loans) {
-    const sorted = [...loans].sort(
-      (a, b) => (a.interestRatePercent || 0) - (b.interestRatePercent || 0)
+// ------------------------------------
+// Read loans from form
+// ------------------------------------
+function readLoansFromForm() {
+  const loansContainer = $("#loans");
+  const loanFieldsets = loansContainer.querySelectorAll("fieldset.loan");
+  const loans = [];
+  loanFieldsets.forEach((fs) => {
+    const name = fs.querySelector(".loan-name").value.trim();
+    const interestRatePercent = parseFloat(
+      fs.querySelector(".loan-interest").value || "0"
+    );
+    const originationFeePercent = parseFloat(
+      fs.querySelector(".loan-fee").value || "0"
+    );
+    const borrowingCap = parseFloat(
+      fs.querySelector(".loan-cap").value || "0"
+    );
+    const repaymentTermYears = parseFloat(
+      fs.querySelector(".loan-term").value || "0"
+    );
+    const inSchoolMonths = parseFloat(
+      fs.querySelector(".loan-accrual").value || "0"
     );
 
-    let remaining = targetAmount;
-    const allocation = [];
+    loans.push({
+      name: name || "Loan",
+      interestRatePercent: isNaN(interestRatePercent)
+        ? 0
+        : interestRatePercent,
+      originationFeePercent: isNaN(originationFeePercent)
+        ? 0
+        : originationFeePercent,
+      borrowingCap:
+        isNaN(borrowingCap) || borrowingCap <= 0 ? null : borrowingCap,
+      repaymentTermYears:
+        isNaN(repaymentTermYears) || repaymentTermYears <= 0
+          ? null
+          : repaymentTermYears,
+      inSchoolMonths:
+        isNaN(inSchoolMonths) || inSchoolMonths < 0 ? null : inSchoolMonths,
+    });
+  });
+  return loans;
+}
 
-    for (const loan of sorted) {
-      if (remaining <= 0) break;
+// ------------------------------------
+// Optimization: allocate lowest-APR loans first
+// BUT we treat targetAmount as NET cash needed.
+// Origination fee is assumed to be charged up-front.
+// netFromLoan = principal * (1 - feeRate)
+// ------------------------------------
+function optimizeMix(targetAmount, loans) {
+  // Sort by interest rate (cheapest first)
+  const sorted = [...loans].sort(
+    (a, b) => (a.interestRatePercent || 0) - (b.interestRatePercent || 0)
+  );
 
-      const cap = loan.borrowingCap ?? remaining;
-      const amount = Math.min(cap, remaining);
-      if (amount <= 0) continue;
+  let remainingNet = targetAmount;
+  const allocation = [];
 
-      const feeRate = (loan.originationFeePercent || 0) / 100;
-      const fee = amount * feeRate;
+  for (const loan of sorted) {
+    if (remainingNet <= 0) break;
 
-      allocation.push({
-        name: loan.name,
-        interestRatePercent: loan.interestRatePercent,
-        originationFeePercent: loan.originationFeePercent,
-        amountPrincipal: amount,
-        feeAmount: fee,
-        totalBorrowed: amount,
-        totalFees: fee,
-      });
+    const feeRate = (loan.originationFeePercent || 0) / 100;
+    const capPrincipal = loan.borrowingCap ?? Infinity;
 
-      remaining -= amount;
-    }
+    // Max net cash this loan can provide if we use full cap
+    const maxNetFromLoan =
+      feeRate < 1 ? capPrincipal * (1 - feeRate) : 0; // avoid division by zero
 
-    return {
-      targetAmount,
-      allocation,
-      uncoveredAmount: Math.max(0, remaining),
-    };
+    if (maxNetFromLoan <= 0) continue;
+
+    const netUsed = Math.min(remainingNet, maxNetFromLoan);
+    const principalUsed =
+      feeRate < 1 ? netUsed / (1 - feeRate) : 0; // invert net = P(1-fee)
+
+    if (principalUsed <= 0) continue;
+
+    allocation.push({
+      loan,
+      principal: principalUsed,
+    });
+
+    remainingNet -= netUsed;
   }
 
-  // -------------------------------
-  // Render results into the DOM
-  // -------------------------------
-  function renderResults(plan) {
-    if (!plan) return;
+  return {
+    targetNetNeeded: targetAmount,
+    allocation,
+    remainingNet: Math.max(0, remainingNet),
+  };
+}
 
-    resultsSection.hidden = false;
+// ------------------------------------
+// Loan stats using term & in-school accrual
+// ------------------------------------
+function computeLoanStats(entry) {
+  const { loan, principal } = entry;
+  const rate = (loan.interestRatePercent || 0) / 100;
+  const feeRate = (loan.originationFeePercent || 0) / 100;
+  const termYears = loan.repaymentTermYears || 10; // default 10 years
+  const inSchoolMonths = loan.inSchoolMonths || 0;
 
-    const totalPrincipal = plan.allocation.reduce(
-      (sum, a) => sum + a.amountPrincipal,
-      0
-    );
+  // Origination fee (assumed upfront, not capitalized)
+  const origFee = principal * feeRate;
+  const netToUser = principal - origFee;
 
-    // Table
-    let html = "";
-    if (plan.allocation.length === 0) {
-      html = "<p>No allocations found. Check your target and loan caps.</p>";
-    } else {
-      html += `<table>
-        <thead>
-          <tr>
-            <th>Loan</th>
-            <th>Interest Rate</br>(APR)</th>
-            <th>Principal</th>
-            <th>Origination Fee</th>
-            <th>% of Principal</th>
-          </tr>
-        </thead>
-        <tbody>`;
+  // In-school interest: simple interest on principal
+  const inSchoolInterest = principal * rate * (inSchoolMonths / 12);
 
-      plan.allocation.forEach((a) => {
-        const pct = totalPrincipal
-          ? ((a.amountPrincipal / totalPrincipal) * 100).toFixed(1)
-          : "0.0";
-        html += `<tr>
-          <td>${a.name}</td>
-          <td>${a.interestRatePercent != null ? a.interestRatePercent.toFixed(2) : "—"}%</td>
-          <td>$${a.amountPrincipal.toLocaleString(undefined, {
-            maximumFractionDigits: 2,
-          })}</td>
-          <td>$${a.feeAmount.toLocaleString(undefined, {
-            maximumFractionDigits: 2,
-          })}</td>
-          <td>${pct}%</td>
-        </tr>`;
-      });
+  // Capitalized principal at start of repayment
+  const capitalizedPrincipal = principal + inSchoolInterest;
 
-      html += `</tbody></table>`;
-    }
+  // Amortization: standard fixed-rate loan
+  const monthlyRate = rate / 12;
+  const nMonths = termYears * 12;
+  let monthlyPayment;
+  if (monthlyRate > 0) {
+    const denom = 1 - Math.pow(1 + monthlyRate, -nMonths);
+    monthlyPayment =
+      denom > 0
+        ? (capitalizedPrincipal * monthlyRate) / denom
+        : capitalizedPrincipal / nMonths;
+  } else {
+    monthlyPayment = capitalizedPrincipal / nMonths;
+  }
 
-    allocationTableDiv.innerHTML = html;
+  const totalRepaid = monthlyPayment * nMonths;
+  const totalInterest = totalRepaid - principal; // includes in-school + repayment interest
 
-    // Summary text
-    let summaryHtml = `<p>Target amount to finance: <strong>$${plan.targetAmount.toLocaleString(
+  return {
+    name: loan.name,
+    interestRatePercent: loan.interestRatePercent,
+    principal,
+    origFee,
+    netToUser,
+    inSchoolInterest,
+    capitalizedPrincipal,
+    monthlyPayment,
+    totalRepaid,
+    totalInterest,
+    termYears,
+    inSchoolMonths,
+  };
+}
+
+// ------------------------------------
+// Render results
+// ------------------------------------
+function renderResults(optResult) {
+  const resultsSection = $("#results");
+  const allocationTableDiv = $("#allocation-table");
+  const summaryDiv = $("#summary");
+  const btnExplain = $("#btn-explain");
+
+  if (!optResult) return;
+
+  resultsSection.hidden = false;
+
+  const stats = optResult.allocation.map(computeLoanStats);
+
+  const totalNetToUser = stats.reduce((s, x) => s + x.netToUser, 0);
+  const totalPrincipal = stats.reduce((s, x) => s + x.principal, 0);
+  const totalOrigFees = stats.reduce((s, x) => s + x.origFee, 0);
+  const totalInterest = stats.reduce((s, x) => s + x.totalInterest, 0);
+  const totalRepaid = stats.reduce((s, x) => s + x.totalRepaid, 0);
+
+  // Table
+  let html = "";
+  if (!stats.length) {
+    html = "<p>No allocations found. Check your target and loan caps.</p>";
+  } else {
+    html += `<table>
+      <thead>
+        <tr>
+          <th>Loan</th>
+          <th>Net to you ($)</th>
+          <th>Principal borrowed ($)</th>
+          <th>Origination fee ($)</th>
+          <th>Est. monthly payment</th>
+          <th>Est. total repaid</th>
+          <th>Est. total interest</th>
+        </tr>
+      </thead>
+      <tbody>`;
+
+    stats.forEach((s) => {
+      html += `<tr>
+        <td>${s.name}</td>
+        <td>$${s.netToUser.toLocaleString(undefined, {
+          maximumFractionDigits: 2,
+        })}</td>
+        <td>$${s.principal.toLocaleString(undefined, {
+          maximumFractionDigits: 2,
+        })}</td>
+        <td>$${s.origFee.toLocaleString(undefined, {
+          maximumFractionDigits: 2,
+        })}</td>
+        <td>$${s.monthlyPayment.toLocaleString(undefined, {
+          maximumFractionDigits: 2,
+        })} / mo</td>
+        <td>$${s.totalRepaid.toLocaleString(undefined, {
+          maximumFractionDigits: 2,
+        })}</td>
+        <td>$${s.totalInterest.toLocaleString(undefined, {
+          maximumFractionDigits: 2,
+        })}</td>
+      </tr>`;
+    });
+
+    html += `</tbody></table>`;
+  }
+
+  allocationTableDiv.innerHTML = html;
+
+  // Summary text
+  let summaryHtml = `<p>Target amount you want to cover (net cash): <strong>$${optResult.targetNetNeeded.toLocaleString(
+    undefined,
+    { maximumFractionDigits: 2 }
+  )}</strong>.</p>`;
+
+  summaryHtml += `<p>Total net disbursed from this mix: <strong>$${totalNetToUser.toLocaleString(
+    undefined,
+    { maximumFractionDigits: 2 }
+  )}</strong>.</p>`;
+
+  summaryHtml += `<p>Total principal borrowed across loans: <strong>$${totalPrincipal.toLocaleString(
+    undefined,
+    { maximumFractionDigits: 2 }
+  )}</strong>.</p>`;
+
+  summaryHtml += `<p>Total origination fees: <strong>$${totalOrigFees.toLocaleString(
+    undefined,
+    { maximumFractionDigits: 2 }
+  )}</strong>.</p>`;
+
+  summaryHtml += `<p>Estimated total interest over the life of these loans: <strong>$${totalInterest.toLocaleString(
+    undefined,
+    { maximumFractionDigits: 2 }
+  )}</strong>.</p>`;
+
+  summaryHtml += `<p>Estimated total repaid (principal + interest): <strong>$${totalRepaid.toLocaleString(
+    undefined,
+    { maximumFractionDigits: 2 }
+  )}</strong>.</p>`;
+
+  if (optResult.remainingNet > 0) {
+    summaryHtml += `<p><strong>Uncovered net amount:</strong> $${optResult.remainingNet.toLocaleString(
       undefined,
       { maximumFractionDigits: 2 }
-    )}</strong>.</p>`;
-
-    const totalPrincipalUsed = totalPrincipal.toLocaleString(undefined, {
-      maximumFractionDigits: 2,
-    });
-
-    summaryHtml += `<p>Total principal allocated across loans: <strong>$${totalPrincipalUsed}</strong>.</p>`;
-
-    if (plan.uncoveredAmount > 0) {
-      summaryHtml += `<p><strong>Uncovered amount:</strong> $${plan.uncoveredAmount.toLocaleString(
-        undefined,
-        { maximumFractionDigits: 2 }
-      )} (no remaining loan caps for this portion).</p>`;
-    } else {
-      summaryHtml += `<p>All of your target amount is covered by the loans entered.</p>`;
-    }
-
-    summaryDiv.innerHTML = summaryHtml;
-
-    // Enable "Explain this plan"
-    btnExplain.disabled = false;
+    )} (no remaining loan caps for this portion).</p>`;
+  } else {
+    summaryHtml += `<p>All of your target net amount is covered by the loans entered.</p>`;
   }
 
-  // -------------------------------
-  // Optimize Mix click handler
-  // -------------------------------
-  btnOptimize.addEventListener("click", () => {
-    const targetInput = document.getElementById("target-amount");
+  summaryHtml += `<p class="muted">These are rough estimates using fixed-rate amortization. Actual interest and payments may differ based on your servicer’s terms.</p>`;
+
+  summaryDiv.innerHTML = summaryHtml;
+
+  // Enable "Explain this plan"
+  btnExplain.disabled = false;
+
+  // Store last plan (for /explain) in a global-ish place
+  window.lastPlanForExplain = {
+    targetAmount: optResult.targetNetNeeded,
+    // make a simpler structure for the explanation endpoint
+    loans: stats.map((s) => ({
+      name: s.name,
+      interestRatePercent: s.interestRatePercent,
+      principal: s.principal,
+      origFee: s.origFee,
+      netToUser: s.netToUser,
+      monthlyPayment: s.monthlyPayment,
+      totalRepaid: s.totalRepaid,
+      totalInterest: s.totalInterest,
+      termYears: s.termYears,
+      inSchoolMonths: s.inSchoolMonths,
+    })),
+  };
+}
+
+// ------------------------------------
+// Parse with GPT (Cloudflare Worker /parse)
+// ------------------------------------
+async function parseFreeTextAndFill() {
+  const btnParse = $("#btn-parse");
+  const freeText = $("#free-text");
+  const text = freeText.value.trim();
+  if (!text) {
+    alert("Please paste or type your loan details first.");
+    return;
+  }
+
+  btnParse.disabled = true;
+  btnParse.textContent = "Parsing...";
+
+  try {
+    const res = await fetch(`${API_BASE}/parse`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ freeText: text }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error("Parse error:", errText);
+      alert("Error parsing with AI. Check console for details.");
+      return;
+    }
+
+    const data = await res.json();
+    const { target_amount, loans, notes } = data;
+
+    if (target_amount != null) {
+      $("#target-amount").value = target_amount;
+    }
+
+    const loansContainer = $("#loans");
+    loansContainer.innerHTML = "";
+    if (Array.isArray(loans) && loans.length > 0) {
+      loans.forEach((loan) => {
+        addLoanRow({
+          name: loan.name,
+          interestRatePercent: loan.interest_rate_percent,
+          originationFeePercent: loan.origination_fee_percent,
+          borrowingCap: loan.borrowing_cap,
+          repaymentTermYears: loan.repayment_term_years,
+          inSchoolMonths: loan.in_school_months,
+        });
+      });
+    } else {
+      addLoanRow();
+    }
+
+    if (notes) {
+      alert("AI notes:\n\n" + notes);
+    }
+  } catch (err) {
+    console.error(err);
+    alert("Unexpected error during AI parsing.");
+  } finally {
+    btnParse.disabled = false;
+    btnParse.textContent = "Fill the form from this text";
+  }
+}
+
+// ------------------------------------
+// Explain with GPT (/explain) using lastPlanForExplain
+// ------------------------------------
+async function requestExplanation() {
+  const btnExplain = $("#btn-explain");
+  const explainSection = $("#explain");
+  const explanationText = $("#explanation-text");
+  const payload = window.lastPlanForExplain;
+
+  if (!payload) return;
+
+  btnExplain.disabled = true;
+  btnExplain.textContent = "Explaining...";
+
+  try {
+    const res = await fetch(`${API_BASE}/explain`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error("Explain error:", errText);
+      explanationText.textContent =
+        "There was an error generating the explanation. Please try again.";
+      explainSection.hidden = false;
+      return;
+    }
+
+    const data = await res.json();
+    const explanation = data.explanation || JSON.stringify(data);
+    explanationText.textContent = explanation;
+    explainSection.hidden = false;
+  } catch (err) {
+    console.error(err);
+    explanationText.textContent =
+      "Unexpected error generating explanation. Please try again.";
+    explainSection.hidden = false;
+  } finally {
+    btnExplain.disabled = false;
+    btnExplain.textContent = "Explain this plan";
+  }
+}
+
+// ------------------------------------
+// DOMContentLoaded: wire everything
+// ------------------------------------
+document.addEventListener("DOMContentLoaded", () => {
+  // Start with one blank row
+  addLoanRow();
+
+  $("#add-loan").addEventListener("click", () => addLoanRow());
+  $("#btn-parse").addEventListener("click", parseFreeTextAndFill);
+
+  $("#optimize").addEventListener("click", () => {
+    const targetInput = $("#target-amount");
     const targetAmount = parseFloat(targetInput.value || "0");
 
     if (isNaN(targetAmount) || targetAmount <= 0) {
@@ -236,122 +455,9 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    const plan = optimizeMix(targetAmount, loans);
-    lastPlan = {
-      targetAmount,
-      loans,
-      plan,
-    };
-
-    renderResults(plan);
+    const optResult = optimizeMix(targetAmount, loans);
+    renderResults(optResult);
   });
 
-  // -------------------------------
-  // Fill the form from free-text (calls /parse)
-  // -------------------------------
-  btnParse.addEventListener("click", async () => {
-    const text = document.getElementById("free-text").value.trim();
-    if (!text) {
-      alert("Please paste or type your loan details first.");
-      return;
-    }
-
-    btnParse.disabled = true;
-    btnParse.textContent = "Parsing...";
-
-    try {
-      const res = await fetch(`${API_BASE}/parse`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ freeText: text }),
-      });
-
-      if (!res.ok) {
-        const err = await res.text();
-        console.error("Parse error:", err);
-        alert("Error parsing with AI. Check console for details.");
-        return;
-      }
-
-      const data = await res.json();
-      const { target_amount, loans, notes } = data;
-
-      // Fill target amount
-      if (target_amount != null) {
-        document.getElementById("target-amount").value = target_amount;
-      }
-
-      // Clear current loans and add AI-parsed ones
-      loansContainer.innerHTML = "";
-      if (Array.isArray(loans) && loans.length > 0) {
-        loans.forEach((loan) => {
-          addLoanRow({
-            name: loan.name,
-            interestRatePercent: loan.interest_rate_percent,
-            originationFeePercent: loan.origination_fee_percent,
-            borrowingCap: loan.borrowing_cap,
-            repaymentTermYears: loan.repayment_term_years,
-            inSchoolMonths: loan.in_school_months,
-          });
-        });
-      } else {
-        addLoanRow();
-      }
-
-      if (notes) {
-        alert("AI notes:\n\n" + notes);
-      }
-    } catch (err) {
-      console.error(err);
-      alert("Unexpected error during AI parsing.");
-    } finally {
-      btnParse.disabled = false;
-      btnParse.textContent = "Fill the form from this text";
-    }
-  });
-
-  // -------------------------------
-  // Explain this plan (calls /explain)
-  // -------------------------------
-  btnExplain.addEventListener("click", async () => {
-    if (!lastPlan) return;
-
-    btnExplain.disabled = true;
-    btnExplain.textContent = "Explaining...";
-
-    try {
-      const res = await fetch(`${API_BASE}/explain`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          targetAmount: lastPlan.targetAmount,
-          loans: lastPlan.loans,
-          plan: lastPlan.plan,
-        }),
-      });
-
-      if (!res.ok) {
-        const err = await res.text();
-        console.error("Explain error:", err);
-        explanationText.textContent =
-          "There was an error generating the explanation. Please try again.";
-        explainSection.hidden = false;
-        return;
-      }
-
-      const data = await res.json();
-      const explanation = data.explanation || JSON.stringify(data);
-
-      explanationText.textContent = explanation;
-      explainSection.hidden = false;
-    } catch (err) {
-      console.error(err);
-      explanationText.textContent =
-        "Unexpected error generating explanation. Please try again.";
-      explainSection.hidden = false;
-    } finally {
-      btnExplain.disabled = false;
-      btnExplain.textContent = "Explain this plan";
-    }
-  });
+  $("#btn-explain").addEventListener("click", requestExplanation);
 });
