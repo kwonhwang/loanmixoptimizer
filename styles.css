@@ -12,6 +12,16 @@ p { margin:.5rem 0; color:var(--fg); }
 label { display:flex; flex-direction:column; gap:.25rem; font-weight:600; }
 input, textarea { padding:.65rem .75rem; border:1px solid var(--ring); border-radius:10px; font:inherit; }
 textarea { width:100%; }
+.reset-btn {
+  background: #f3f4f6;
+  color: var(--fg);
+  border: 1px solid var(--ring);
+}
+
+.reset-btn:hover {
+  background: #e5e7eb;
+}
+
 button {
   cursor:pointer; border:1px solid var(--ring); background:var(--fg); color:#fff;
   padding:.6rem .9rem; border-radius:10px; font-weight:700;
