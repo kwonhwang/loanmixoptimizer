@@ -81,8 +81,8 @@ function readLoansFromForm() {
 
 // ------------------------------------
 // Optimization: allocate lowest-APR loans first
-// Treat targetAmount as NET cash needed
-// net = principal * (1 - feeRate)
+// Target is NET cash needed (after fees).
+// netFromLoan = principal * (1 - feeRate)
 // ------------------------------------
 function optimizeMix(targetAmount, loans) {
   const sorted = [...loans].sort(
@@ -124,7 +124,7 @@ function optimizeMix(targetAmount, loans) {
 }
 
 // ------------------------------------
-// Loan stats – ONLY in-school behavior
+// Loan stats – in-school only
 // ------------------------------------
 function computeLoanStats(entry) {
   const { loan, principal } = entry;
@@ -136,9 +136,6 @@ function computeLoanStats(entry) {
   const origFee = principal * feeRate;
   const netToUser = principal - origFee;
 
-  // In-school interest:
-  // - subsidizedInSchool: assumed 0 (gov pays interest during school)
-  // - otherwise: simple interest on principal
   const inSchoolInterest = subsidizedInSchool
     ? 0
     : principal * rate * (inSchoolMonths / 12);
@@ -181,10 +178,9 @@ function renderResults(optResult) {
     0
   );
 
-  // Table
   let html = "";
   if (!stats.length) {
-    html = "<p>No allocations found. Check your target and loan caps.</p>";
+    html = "<p>No allocations found. Check your target amount and loan caps.</p>";
   } else {
     html += `<table>
       <thead>
@@ -225,8 +221,7 @@ function renderResults(optResult) {
 
   allocationTableDiv.innerHTML = html;
 
-  // Summary text
-  let summaryHtml = `<p>Target amount you want to cover (net cash): <strong>$${optResult.targetNetNeeded.toLocaleString(
+  let summaryHtml = `<p>Target net amount to cover (after fees): <strong>$${optResult.targetNetNeeded.toLocaleString(
     undefined,
     { maximumFractionDigits: 2 }
   )}</strong>.</p>`;
@@ -267,10 +262,9 @@ function renderResults(optResult) {
 
   summaryDiv.innerHTML = summaryHtml;
 
-  // Enable "Explain this plan"
   btnExplain.disabled = false;
 
-  // Store last plan for explanation
+  // Save simplified payload for /explain
   window.lastPlanForExplain = {
     targetAmount: optResult.targetNetNeeded,
     loans: stats.map((s) => ({
@@ -288,7 +282,7 @@ function renderResults(optResult) {
 }
 
 // ------------------------------------
-// Parse with GPT (Cloudflare Worker /parse)
+// Parse with GPT (/parse)
 // ------------------------------------
 async function parseFreeTextAndFill() {
   const btnParse = $("#btn-parse");
@@ -333,7 +327,6 @@ async function parseFreeTextAndFill() {
           originationFeePercent: loan.origination_fee_percent,
           borrowingCap: loan.borrowing_cap,
           inSchoolMonths: loan.in_school_months,
-          // if you later add this to the Worker JSON, map it here:
           subsidizedInSchool: loan.subsidized_in_school ?? false,
         });
       });
@@ -354,7 +347,7 @@ async function parseFreeTextAndFill() {
 }
 
 // ------------------------------------
-// Explain with GPT (/explain) using lastPlanForExplain
+// Explain with GPT (/explain)
 // ------------------------------------
 async function requestExplanation() {
   const btnExplain = $("#btn-explain");
@@ -400,7 +393,6 @@ async function requestExplanation() {
 
 // ------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
-  // Start with one blank row
   addLoanRow();
 
   $("#add-loan").addEventListener("click", () => addLoanRow());
