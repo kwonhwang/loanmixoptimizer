@@ -475,44 +475,45 @@ function setupSpeechRecognition() {
 }
 
 
-// ------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
   addLoanRow();
 
+  $("#reset").addEventListener("click", resetTool);
   $("#add-loan").addEventListener("click", () => addLoanRow());
   $("#btn-parse").addEventListener("click", parseFreeTextAndFill);
 
+  // Optimize Mix
   $("#optimize").addEventListener("click", () => {
-  // --- RESET EXPLANATION ---
-  const explainSection = $("#explain");
-  const explanationText = $("#explanation-text");
-  const btnExplain = $("#btn-explain");
+    // --- RESET EXPLANATION ---
+    const explainSection = $("#explain");
+    const explanationText = $("#explanation-text");
+    const btnExplain = $("#btn-explain");
 
-  explanationText.textContent = "";
-  explainSection.hidden = true;
-  btnExplain.disabled = true;   // re-enabled after results
+    explanationText.textContent = "";
+    explainSection.hidden = true;
+    btnExplain.disabled = true;
 
-  // --- RUN OPTIMIZATION ---
-  const targetInput = $("#target-amount");
-  const targetAmount = parseFloat(targetInput.value || "0");
+    // --- RUN OPTIMIZATION ---
+    const targetAmount = parseFloat($("#target-amount").value || 0);
+    if (!targetAmount || targetAmount <= 0) {
+      alert("Please enter a positive target amount to finance.");
+      return;
+    }
 
-  if (isNaN(targetAmount) || targetAmount <= 0) {
-    alert("Please enter a positive target amount to finance.");
-    return;
-  }
+    const loans = readLoansFromForm();
+    if (!loans.length) {
+      alert("Please enter at least one loan option.");
+      return;
+    }
 
-  const loans = readLoansFromForm();
-  if (!loans.length) {
-    alert("Please enter at least one loan option.");
-    return;
-  }
+    const optResult = optimizeMix(targetAmount, loans);
+    renderResults(optResult);
+  });   // <-- THIS was missing
 
-  const optResult = optimizeMix(targetAmount, loans);
-  renderResults(optResult);   // this re-enables "Explain" after successful run
-});
-
-
+  // Explain plan
   $("#btn-explain").addEventListener("click", requestExplanation);
 
-    setupSpeechRecognition();
+  // Enable speech recognition
+  setupSpeechRecognition();
 });
+
