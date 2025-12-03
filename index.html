@@ -41,30 +41,32 @@ I need $28,000. Direct Unsubsidized 8.05% fee 1.057% cap 12000; PLUS 9.1% fee 4.
 
     <div id="loans"></div>
     <template id="loan-row">
-      <fieldset class="loan">
-        <div class="grid">
-          <label>Name
-            <input type="text" class="loan-name" placeholder="e.g., Direct Subsidized" />
-          </label>
-          <label>Interest Rate (%)
-            <input type="number" class="loan-interest" min="0" step="0.01" placeholder="6.53" />
-          </label>
-          <label>Origination Fee (% of principal)
-            <input type="number" class="loan-fee" min="0" step="0.01" placeholder="1.057" />
-          </label>
-          <label>Borrowing Cap ($)
-            <input type="number" class="loan-cap" min="0" step="0.01" placeholder="20500" />
-          </label>
-          <label>Repayment Term (years)
-            <input type="number" class="loan-term" min="1" step="1" placeholder="10" />
-          </label>
-          <label>In-School Accrual (months)
-            <input type="number" class="loan-accrual" min="0" step="1" placeholder="24" />
-          </label>
-        </div>
-        <button type="button" class="remove-loan">Remove</button>
-      </fieldset>
-    </template>
+  <fieldset class="loan">
+    <div class="grid">
+      <label>Name
+        <input type="text" class="loan-name" placeholder="e.g., Direct Subsidized" />
+      </label>
+      <label>Interest Rate (%)
+        <input type="number" class="loan-interest" min="0" step="0.01" placeholder="6.53" />
+      </label>
+      <label>Origination Fee (% of principal)
+        <input type="number" class="loan-fee" min="0" step="0.01" placeholder="1.057" />
+      </label>
+      <label>Borrowing Cap ($)
+        <input type="number" class="loan-cap" min="0" step="0.01" placeholder="20500" />
+      </label>
+      <label>In-School Accrual (months)
+        <input type="number" class="loan-accrual" min="0" step="1" placeholder="24" />
+      </label>
+      <label>
+        Interest subsidized in school?
+        <input type="checkbox" class="loan-subsidized" />
+      </label>
+    </div>
+    <button type="button" class="remove-loan">Remove</button>
+  </fieldset>
+</template>
+
   </section>
 
   <!-- 4) Optimize -->
