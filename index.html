@@ -15,17 +15,22 @@
 <main>
 
   <!-- 1) Free-text first: parse to pre-fill the form -->
-  <section class="card">
+ <section class="card">
+  <div class="row header">
     <h2>Paste your loan details</h2>
-    <textarea id="free-text" rows="5" placeholder="Example:
+    <button id="reset" type="button" class="reset-btn">Reset</button>
+  </div>
+
+  <textarea id="free-text" rows="5" placeholder="Example:
 I need $28,000. Direct Unsubsidized 8.05% fee 1.057% cap 12000; PLUS 9.1% fee 4.228% cap 20000; 24 months in-school."></textarea>
-      <div class="actions mt">
+
+  <div class="actions mt">
     <button id="btn-speech" type="button">🎙 Speak instead</button>
     <span id="speech-status" class="muted"></span>
     <button id="btn-parse" type="button">Fill the form from this text</button>
   </div>
+</section>
 
-  </section>
   
   <!-- 2) Amount to finance -->
   <section class="card">
