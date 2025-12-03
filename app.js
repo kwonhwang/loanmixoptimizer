@@ -399,23 +399,34 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#btn-parse").addEventListener("click", parseFreeTextAndFill);
 
   $("#optimize").addEventListener("click", () => {
-    const targetInput = $("#target-amount");
-    const targetAmount = parseFloat(targetInput.value || "0");
+  // --- RESET EXPLANATION ---
+  const explainSection = $("#explain");
+  const explanationText = $("#explanation-text");
+  const btnExplain = $("#btn-explain");
 
-    if (isNaN(targetAmount) || targetAmount <= 0) {
-      alert("Please enter a positive target amount to finance.");
-      return;
-    }
+  explanationText.textContent = "";
+  explainSection.hidden = true;
+  btnExplain.disabled = true;   // re-enabled after results
 
-    const loans = readLoansFromForm();
-    if (!loans.length) {
-      alert("Please enter at least one loan option.");
-      return;
-    }
+  // --- RUN OPTIMIZATION ---
+  const targetInput = $("#target-amount");
+  const targetAmount = parseFloat(targetInput.value || "0");
 
-    const optResult = optimizeMix(targetAmount, loans);
-    renderResults(optResult);
-  });
+  if (isNaN(targetAmount) || targetAmount <= 0) {
+    alert("Please enter a positive target amount to finance.");
+    return;
+  }
+
+  const loans = readLoansFromForm();
+  if (!loans.length) {
+    alert("Please enter at least one loan option.");
+    return;
+  }
+
+  const optResult = optimizeMix(targetAmount, loans);
+  renderResults(optResult);   // this re-enables "Explain" after successful run
+});
+
 
   $("#btn-explain").addEventListener("click", requestExplanation);
 });
