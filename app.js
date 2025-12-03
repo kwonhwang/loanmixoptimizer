@@ -18,8 +18,8 @@ function addLoanRow(prefill = {}) {
   const interestInput = fieldset.querySelector(".loan-interest");
   const feeInput = fieldset.querySelector(".loan-fee");
   const capInput = fieldset.querySelector(".loan-cap");
-  const termInput = fieldset.querySelector(".loan-term");
   const accrualInput = fieldset.querySelector(".loan-accrual");
+  const subsidizedInput = fieldset.querySelector(".loan-subsidized");
 
   if (prefill.name) nameInput.value = prefill.name;
   if (prefill.interestRatePercent != null)
@@ -27,10 +27,10 @@ function addLoanRow(prefill = {}) {
   if (prefill.originationFeePercent != null)
     feeInput.value = prefill.originationFeePercent;
   if (prefill.borrowingCap != null) capInput.value = prefill.borrowingCap;
-  if (prefill.repaymentTermYears != null)
-    termInput.value = prefill.repaymentTermYears;
   if (prefill.inSchoolMonths != null)
     accrualInput.value = prefill.inSchoolMonths;
+  if (prefill.subsidizedInSchool != null)
+    subsidizedInput.checked = !!prefill.subsidizedInSchool;
 
   const removeBtn = fieldset.querySelector(".remove-loan");
   removeBtn.addEventListener("click", () => fieldset.remove());
@@ -56,12 +56,10 @@ function readLoansFromForm() {
     const borrowingCap = parseFloat(
       fs.querySelector(".loan-cap").value || "0"
     );
-    const repaymentTermYears = parseFloat(
-      fs.querySelector(".loan-term").value || "0"
-    );
     const inSchoolMonths = parseFloat(
       fs.querySelector(".loan-accrual").value || "0"
     );
+    const subsidizedInSchool = fs.querySelector(".loan-subsidized").checked;
 
     loans.push({
       name: name || "Loan",
@@ -73,12 +71,9 @@ function readLoansFromForm() {
         : originationFeePercent,
       borrowingCap:
         isNaN(borrowingCap) || borrowingCap <= 0 ? null : borrowingCap,
-      repaymentTermYears:
-        isNaN(repaymentTermYears) || repaymentTermYears <= 0
-          ? null
-          : repaymentTermYears,
       inSchoolMonths:
         isNaN(inSchoolMonths) || inSchoolMonths < 0 ? null : inSchoolMonths,
+      subsidizedInSchool,
     });
   });
   return loans;
@@ -86,12 +81,10 @@ function readLoansFromForm() {
 
 // ------------------------------------
 // Optimization: allocate lowest-APR loans first
-// BUT we treat targetAmount as NET cash needed.
-// Origination fee is assumed to be charged up-front.
-// netFromLoan = principal * (1 - feeRate)
+// Treat targetAmount as NET cash needed
+// net = principal * (1 - feeRate)
 // ------------------------------------
 function optimizeMix(targetAmount, loans) {
-  // Sort by interest rate (cheapest first)
   const sorted = [...loans].sort(
     (a, b) => (a.interestRatePercent || 0) - (b.interestRatePercent || 0)
   );
@@ -104,16 +97,14 @@ function optimizeMix(targetAmount, loans) {
 
     const feeRate = (loan.originationFeePercent || 0) / 100;
     const capPrincipal = loan.borrowingCap ?? Infinity;
-
-    // Max net cash this loan can provide if we use full cap
     const maxNetFromLoan =
-      feeRate < 1 ? capPrincipal * (1 - feeRate) : 0; // avoid division by zero
+      feeRate < 1 ? capPrincipal * (1 - feeRate) : 0;
 
     if (maxNetFromLoan <= 0) continue;
 
     const netUsed = Math.min(remainingNet, maxNetFromLoan);
     const principalUsed =
-      feeRate < 1 ? netUsed / (1 - feeRate) : 0; // invert net = P(1-fee)
+      feeRate < 1 ? netUsed / (1 - feeRate) : 0;
 
     if (principalUsed <= 0) continue;
 
@@ -133,41 +124,26 @@ function optimizeMix(targetAmount, loans) {
 }
 
 // ------------------------------------
-// Loan stats using term & in-school accrual
+// Loan stats – ONLY in-school behavior
 // ------------------------------------
 function computeLoanStats(entry) {
   const { loan, principal } = entry;
   const rate = (loan.interestRatePercent || 0) / 100;
   const feeRate = (loan.originationFeePercent || 0) / 100;
-  const termYears = loan.repaymentTermYears || 10; // default 10 years
   const inSchoolMonths = loan.inSchoolMonths || 0;
+  const subsidizedInSchool = !!loan.subsidizedInSchool;
 
-  // Origination fee (assumed upfront, not capitalized)
   const origFee = principal * feeRate;
   const netToUser = principal - origFee;
 
-  // In-school interest: simple interest on principal
-  const inSchoolInterest = principal * rate * (inSchoolMonths / 12);
+  // In-school interest:
+  // - subsidizedInSchool: assumed 0 (gov pays interest during school)
+  // - otherwise: simple interest on principal
+  const inSchoolInterest = subsidizedInSchool
+    ? 0
+    : principal * rate * (inSchoolMonths / 12);
 
-  // Capitalized principal at start of repayment
   const capitalizedPrincipal = principal + inSchoolInterest;
-
-  // Amortization: standard fixed-rate loan
-  const monthlyRate = rate / 12;
-  const nMonths = termYears * 12;
-  let monthlyPayment;
-  if (monthlyRate > 0) {
-    const denom = 1 - Math.pow(1 + monthlyRate, -nMonths);
-    monthlyPayment =
-      denom > 0
-        ? (capitalizedPrincipal * monthlyRate) / denom
-        : capitalizedPrincipal / nMonths;
-  } else {
-    monthlyPayment = capitalizedPrincipal / nMonths;
-  }
-
-  const totalRepaid = monthlyPayment * nMonths;
-  const totalInterest = totalRepaid - principal; // includes in-school + repayment interest
 
   return {
     name: loan.name,
@@ -177,11 +153,8 @@ function computeLoanStats(entry) {
     netToUser,
     inSchoolInterest,
     capitalizedPrincipal,
-    monthlyPayment,
-    totalRepaid,
-    totalInterest,
-    termYears,
     inSchoolMonths,
+    subsidizedInSchool,
   };
 }
 
@@ -203,8 +176,10 @@ function renderResults(optResult) {
   const totalNetToUser = stats.reduce((s, x) => s + x.netToUser, 0);
   const totalPrincipal = stats.reduce((s, x) => s + x.principal, 0);
   const totalOrigFees = stats.reduce((s, x) => s + x.origFee, 0);
-  const totalInterest = stats.reduce((s, x) => s + x.totalInterest, 0);
-  const totalRepaid = stats.reduce((s, x) => s + x.totalRepaid, 0);
+  const totalInSchoolInterest = stats.reduce(
+    (s, x) => s + x.inSchoolInterest,
+    0
+  );
 
   // Table
   let html = "";
@@ -218,16 +193,15 @@ function renderResults(optResult) {
           <th>Net to you ($)</th>
           <th>Principal borrowed ($)</th>
           <th>Origination fee ($)</th>
-          <th>Est. monthly payment</th>
-          <th>Est. total repaid</th>
-          <th>Est. total interest</th>
+          <th>Est. in-school interest ($)</th>
+          <th>Balance after school ($)</th>
         </tr>
       </thead>
       <tbody>`;
 
     stats.forEach((s) => {
       html += `<tr>
-        <td>${s.name}</td>
+        <td>${s.name}${s.subsidizedInSchool ? " (subsidized in school)" : ""}</td>
         <td>$${s.netToUser.toLocaleString(undefined, {
           maximumFractionDigits: 2,
         })}</td>
@@ -237,13 +211,10 @@ function renderResults(optResult) {
         <td>$${s.origFee.toLocaleString(undefined, {
           maximumFractionDigits: 2,
         })}</td>
-        <td>$${s.monthlyPayment.toLocaleString(undefined, {
-          maximumFractionDigits: 2,
-        })} / mo</td>
-        <td>$${s.totalRepaid.toLocaleString(undefined, {
+        <td>$${s.inSchoolInterest.toLocaleString(undefined, {
           maximumFractionDigits: 2,
         })}</td>
-        <td>$${s.totalInterest.toLocaleString(undefined, {
+        <td>$${s.capitalizedPrincipal.toLocaleString(undefined, {
           maximumFractionDigits: 2,
         })}</td>
       </tr>`;
@@ -275,12 +246,7 @@ function renderResults(optResult) {
     { maximumFractionDigits: 2 }
   )}</strong>.</p>`;
 
-  summaryHtml += `<p>Estimated total interest over the life of these loans: <strong>$${totalInterest.toLocaleString(
-    undefined,
-    { maximumFractionDigits: 2 }
-  )}</strong>.</p>`;
-
-  summaryHtml += `<p>Estimated total repaid (principal + interest): <strong>$${totalRepaid.toLocaleString(
+  summaryHtml += `<p>Estimated total interest that accrues while you are in school: <strong>$${totalInSchoolInterest.toLocaleString(
     undefined,
     { maximumFractionDigits: 2 }
   )}</strong>.</p>`;
@@ -294,28 +260,29 @@ function renderResults(optResult) {
     summaryHtml += `<p>All of your target net amount is covered by the loans entered.</p>`;
   }
 
-  summaryHtml += `<p class="muted">These are rough estimates using fixed-rate amortization. Actual interest and payments may differ based on your servicer’s terms.</p>`;
+  summaryHtml += `<p class="muted">
+    These numbers only reflect interest that may accrue while you are in school and the balance at the end of that period.
+    Actual repayment will also depend on your servicer's grace period, repayment plan, and other terms.
+  </p>`;
 
   summaryDiv.innerHTML = summaryHtml;
 
   // Enable "Explain this plan"
   btnExplain.disabled = false;
 
-  // Store last plan (for /explain) in a global-ish place
+  // Store last plan for explanation
   window.lastPlanForExplain = {
     targetAmount: optResult.targetNetNeeded,
-    // make a simpler structure for the explanation endpoint
     loans: stats.map((s) => ({
       name: s.name,
       interestRatePercent: s.interestRatePercent,
       principal: s.principal,
       origFee: s.origFee,
       netToUser: s.netToUser,
-      monthlyPayment: s.monthlyPayment,
-      totalRepaid: s.totalRepaid,
-      totalInterest: s.totalInterest,
-      termYears: s.termYears,
+      inSchoolInterest: s.inSchoolInterest,
+      capitalizedPrincipal: s.capitalizedPrincipal,
       inSchoolMonths: s.inSchoolMonths,
+      subsidizedInSchool: s.subsidizedInSchool,
     })),
   };
 }
@@ -365,8 +332,9 @@ async function parseFreeTextAndFill() {
           interestRatePercent: loan.interest_rate_percent,
           originationFeePercent: loan.origination_fee_percent,
           borrowingCap: loan.borrowing_cap,
-          repaymentTermYears: loan.repayment_term_years,
           inSchoolMonths: loan.in_school_months,
+          // if you later add this to the Worker JSON, map it here:
+          subsidizedInSchool: loan.subsidized_in_school ?? false,
         });
       });
     } else {
@@ -430,8 +398,6 @@ async function requestExplanation() {
   }
 }
 
-// ------------------------------------
-// DOMContentLoaded: wire everything
 // ------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
   // Start with one blank row
