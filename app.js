@@ -392,6 +392,90 @@ async function requestExplanation() {
 }
 
 // ------------------------------------
+// Speech recognition (browser Web Speech API)
+// ------------------------------------
+function setupSpeechRecognition() {
+  const btnSpeech = $("#btn-speech");
+  const speechStatus = $("#speech-status");
+  const freeText = $("#free-text");
+  const btnParse = $("#btn-parse");
+
+  // If elements not on page, do nothing
+  if (!btnSpeech || !speechStatus || !freeText) return;
+
+  const SpeechRecognition =
+    window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  if (!SpeechRecognition) {
+    btnSpeech.disabled = true;
+    speechStatus.textContent = "Speech input not supported in this browser.";
+    return;
+  }
+
+  const recognition = new SpeechRecognition();
+  recognition.lang = "en-US";
+  recognition.interimResults = true;
+  recognition.continuous = false;
+
+  let isListening = false;
+
+  btnSpeech.addEventListener("click", () => {
+    if (!isListening) {
+      try {
+        recognition.start();
+        isListening = true;
+        btnSpeech.textContent = "⏹ Stop";
+        speechStatus.textContent = "Listening… speak your loan details.";
+        if (btnParse) btnParse.disabled = true;
+      } catch (e) {
+        console.error("Error starting recognition:", e);
+      }
+    } else {
+      recognition.stop();
+    }
+  });
+
+  recognition.addEventListener("result", (event) => {
+    let transcript = "";
+    for (let i = 0; i < event.results.length; i++) {
+      transcript += event.results[i][0].transcript;
+    }
+
+    const existing = freeText.value.trim();
+    freeText.value = existing
+      ? existing + "\n" + transcript.trim()
+      : transcript.trim();
+  });
+
+  recognition.addEventListener("end", () => {
+    isListening = false;
+    btnSpeech.textContent = "🎙 Speak instead";
+    speechStatus.textContent =
+      "Finished listening. Edit if needed, then click “Fill the form from this text”.";
+    if (btnParse) btnParse.disabled = false;
+  });
+
+  recognition.addEventListener("error", (event) => {
+    console.error("Speech recognition error:", event.error);
+    isListening = false;
+    btnSpeech.textContent = "🎙 Speak instead";
+    if (btnParse) btnParse.disabled = false;
+
+    if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+      speechStatus.textContent =
+        "Microphone permission was denied. Allow mic access in your browser settings.";
+    } else if (event.error === "no-speech") {
+      speechStatus.textContent =
+        "No speech detected. Try again and speak clearly into the mic.";
+    } else {
+      speechStatus.textContent =
+        "Speech recognition error. Try again or type your details instead.";
+    }
+  });
+}
+
+
+// ------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
   addLoanRow();
 
@@ -429,4 +513,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
   $("#btn-explain").addEventListener("click", requestExplanation);
+
+    setupSpeechRecognition();
 });
