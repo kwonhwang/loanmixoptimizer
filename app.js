@@ -439,12 +439,14 @@ function setupSpeechRecognition() {
   recognition.continuous = false;
 
   let isListening = false;
+  let finalTranscript = "";
 
   btnSpeech.addEventListener("click", () => {
     if (!isListening) {
       try {
         recognition.start();
         isListening = true;
+        finalTranscript = "";
         btnSpeech.textContent = "⏹ Stop";
         speechStatus.textContent = "Listening… speak your loan details.";
         if (btnParse) btnParse.disabled = true;
@@ -456,23 +458,31 @@ function setupSpeechRecognition() {
     }
   });
 
+  // Build up the best current transcript, but DON'T touch the textarea yet
   recognition.addEventListener("result", (event) => {
-    let transcript = "";
+    finalTranscript = "";
     for (let i = 0; i < event.results.length; i++) {
-      transcript += event.results[i][0].transcript;
+      finalTranscript += event.results[i][0].transcript;
     }
-
-    const existing = freeText.value.trim();
-    freeText.value = existing
-      ? existing + "\n" + transcript.trim()
-      : transcript.trim();
   });
 
+  // When recording ends, append the *final* transcript once
   recognition.addEventListener("end", () => {
     isListening = false;
     btnSpeech.textContent = "🎙 Speak instead";
-    speechStatus.textContent =
-      "Finished listening. Edit if needed, then click “Fill the form from this text”.";
+
+    if (finalTranscript.trim()) {
+      const existing = freeText.value.trim();
+      freeText.value = existing
+        ? existing + "\n" + finalTranscript.trim()
+        : finalTranscript.trim();
+      speechStatus.textContent =
+        "Finished listening. Edit if needed, then click “Fill the form from this text”.";
+    } else {
+      speechStatus.textContent =
+        "No speech detected. Try again or type your details instead.";
+    }
+
     if (btnParse) btnParse.disabled = false;
   });
 
@@ -494,6 +504,7 @@ function setupSpeechRecognition() {
     }
   });
 }
+
 
 // ------------------------------------
 // Reset everything back to initial state
