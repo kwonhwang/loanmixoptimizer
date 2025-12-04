@@ -1,5 +1,5 @@
 // app.js
-const API_BASE = "https://loanmixoptimizer.kwonhwan.workers.dev"; 
+const API_BASE = "https://loanmixoptimizer.kwonhwan.workers.dev";
 
 // --- DOM helpers ---
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -11,8 +11,11 @@ const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 function addLoanRow(prefill = {}) {
   const template = $("#loan-row");
   const loansContainer = $("#loans");
+  if (!template || !loansContainer) return;
+
   const clone = template.content.cloneNode(true);
   const fieldset = clone.querySelector("fieldset.loan");
+  if (!fieldset) return;
 
   const nameInput = fieldset.querySelector(".loan-name");
   const interestInput = fieldset.querySelector(".loan-interest");
@@ -21,19 +24,22 @@ function addLoanRow(prefill = {}) {
   const accrualInput = fieldset.querySelector(".loan-accrual");
   const subsidizedInput = fieldset.querySelector(".loan-subsidized");
 
-  if (prefill.name) nameInput.value = prefill.name;
-  if (prefill.interestRatePercent != null)
+  if (nameInput && prefill.name) nameInput.value = prefill.name;
+  if (interestInput && prefill.interestRatePercent != null)
     interestInput.value = prefill.interestRatePercent;
-  if (prefill.originationFeePercent != null)
+  if (feeInput && prefill.originationFeePercent != null)
     feeInput.value = prefill.originationFeePercent;
-  if (prefill.borrowingCap != null) capInput.value = prefill.borrowingCap;
-  if (prefill.inSchoolMonths != null)
+  if (capInput && prefill.borrowingCap != null)
+    capInput.value = prefill.borrowingCap;
+  if (accrualInput && prefill.inSchoolMonths != null)
     accrualInput.value = prefill.inSchoolMonths;
-  if (prefill.subsidizedInSchool != null)
+  if (subsidizedInput && prefill.subsidizedInSchool != null)
     subsidizedInput.checked = !!prefill.subsidizedInSchool;
 
   const removeBtn = fieldset.querySelector(".remove-loan");
-  removeBtn.addEventListener("click", () => fieldset.remove());
+  if (removeBtn) {
+    removeBtn.addEventListener("click", () => fieldset.remove());
+  }
 
   loansContainer.appendChild(clone);
 }
@@ -43,23 +49,26 @@ function addLoanRow(prefill = {}) {
 // ------------------------------------
 function readLoansFromForm() {
   const loansContainer = $("#loans");
+  if (!loansContainer) return [];
+
   const loanFieldsets = loansContainer.querySelectorAll("fieldset.loan");
   const loans = [];
   loanFieldsets.forEach((fs) => {
-    const name = fs.querySelector(".loan-name").value.trim();
+    const name = fs.querySelector(".loan-name")?.value.trim() || "";
     const interestRatePercent = parseFloat(
-      fs.querySelector(".loan-interest").value || "0"
+      fs.querySelector(".loan-interest")?.value || "0"
     );
     const originationFeePercent = parseFloat(
-      fs.querySelector(".loan-fee").value || "0"
+      fs.querySelector(".loan-fee")?.value || "0"
     );
     const borrowingCap = parseFloat(
-      fs.querySelector(".loan-cap").value || "0"
+      fs.querySelector(".loan-cap")?.value || "0"
     );
     const inSchoolMonths = parseFloat(
-      fs.querySelector(".loan-accrual").value || "0"
+      fs.querySelector(".loan-accrual")?.value || "0"
     );
-    const subsidizedInSchool = fs.querySelector(".loan-subsidized").checked;
+    const subsidizedInSchool =
+      fs.querySelector(".loan-subsidized")?.checked ?? false;
 
     loans.push({
       name: name || "Loan",
@@ -97,14 +106,12 @@ function optimizeMix(targetAmount, loans) {
 
     const feeRate = (loan.originationFeePercent || 0) / 100;
     const capPrincipal = loan.borrowingCap ?? Infinity;
-    const maxNetFromLoan =
-      feeRate < 1 ? capPrincipal * (1 - feeRate) : 0;
+    const maxNetFromLoan = feeRate < 1 ? capPrincipal * (1 - feeRate) : 0;
 
     if (maxNetFromLoan <= 0) continue;
 
     const netUsed = Math.min(remainingNet, maxNetFromLoan);
-    const principalUsed =
-      feeRate < 1 ? netUsed / (1 - feeRate) : 0;
+    const principalUsed = feeRate < 1 ? netUsed / (1 - feeRate) : 0;
 
     if (principalUsed <= 0) continue;
 
@@ -164,7 +171,8 @@ function renderResults(optResult) {
   const summaryDiv = $("#summary");
   const btnExplain = $("#btn-explain");
 
-  if (!optResult) return;
+  if (!optResult || !resultsSection || !allocationTableDiv || !summaryDiv)
+    return;
 
   resultsSection.hidden = false;
 
@@ -262,7 +270,7 @@ function renderResults(optResult) {
 
   summaryDiv.innerHTML = summaryHtml;
 
-  btnExplain.disabled = false;
+  if (btnExplain) btnExplain.disabled = false;
 
   // Save simplified payload for /explain
   window.lastPlanForExplain = {
@@ -287,14 +295,18 @@ function renderResults(optResult) {
 async function parseFreeTextAndFill() {
   const btnParse = $("#btn-parse");
   const freeText = $("#free-text");
+  if (!freeText) return;
+
   const text = freeText.value.trim();
   if (!text) {
     alert("Please paste or type your loan details first.");
     return;
   }
 
-  btnParse.disabled = true;
-  btnParse.textContent = "Parsing...";
+  if (btnParse) {
+    btnParse.disabled = true;
+    btnParse.textContent = "Parsing...";
+  }
 
   try {
     const res = await fetch(`${API_BASE}/parse`, {
@@ -313,12 +325,15 @@ async function parseFreeTextAndFill() {
     const data = await res.json();
     const { target_amount, loans, notes } = data;
 
-    if (target_amount != null) {
-      $("#target-amount").value = target_amount;
+    const targetInput = $("#target-amount");
+    if (targetInput && target_amount != null) {
+      targetInput.value = target_amount;
     }
 
     const loansContainer = $("#loans");
+    if (!loansContainer) return;
     loansContainer.innerHTML = "";
+
     if (Array.isArray(loans) && loans.length > 0) {
       loans.forEach((loan) => {
         addLoanRow({
@@ -341,8 +356,10 @@ async function parseFreeTextAndFill() {
     console.error(err);
     alert("Unexpected error during AI parsing.");
   } finally {
-    btnParse.disabled = false;
-    btnParse.textContent = "Fill the form from this text";
+    if (btnParse) {
+      btnParse.disabled = false;
+      btnParse.textContent = "Fill the form from this text";
+    }
   }
 }
 
@@ -355,10 +372,12 @@ async function requestExplanation() {
   const explanationText = $("#explanation-text");
   const payload = window.lastPlanForExplain;
 
-  if (!payload) return;
+  if (!payload || !explainSection || !explanationText) return;
 
-  btnExplain.disabled = true;
-  btnExplain.textContent = "Explaining...";
+  if (btnExplain) {
+    btnExplain.disabled = true;
+    btnExplain.textContent = "Explaining...";
+  }
 
   try {
     const res = await fetch(`${API_BASE}/explain`, {
@@ -386,8 +405,10 @@ async function requestExplanation() {
       "Unexpected error generating explanation. Please try again.";
     explainSection.hidden = false;
   } finally {
-    btnExplain.disabled = false;
-    btnExplain.textContent = "Explain this plan";
+    if (btnExplain) {
+      btnExplain.disabled = false;
+      btnExplain.textContent = "Explain this plan";
+    }
   }
 }
 
@@ -474,46 +495,106 @@ function setupSpeechRecognition() {
   });
 }
 
+// ------------------------------------
+// Reset everything back to initial state
+// ------------------------------------
+function resetTool() {
+  // Clear free text
+  const freeText = $("#free-text");
+  if (freeText) freeText.value = "";
 
-document.addEventListener("DOMContentLoaded", () => {
+  // Clear target amount
+  const targetInput = $("#target-amount");
+  if (targetInput) targetInput.value = "";
+
+  // Clear loan rows
+  const loansContainer = $("#loans");
+  if (loansContainer) loansContainer.innerHTML = "";
+
+  // Add a fresh blank row
   addLoanRow();
 
-  $("#reset").addEventListener("click", resetTool);
-  $("#add-loan").addEventListener("click", () => addLoanRow());
-  $("#btn-parse").addEventListener("click", parseFreeTextAndFill);
+  // Clear results
+  const resultsSection = $("#results");
+  const allocationTable = $("#allocation-table");
+  const summary = $("#summary");
+  if (allocationTable) allocationTable.innerHTML = "";
+  if (summary) summary.innerHTML = "";
+  if (resultsSection) resultsSection.hidden = true;
 
-  // Optimize Mix
-  $("#optimize").addEventListener("click", () => {
-    // --- RESET EXPLANATION ---
-    const explainSection = $("#explain");
-    const explanationText = $("#explanation-text");
-    const btnExplain = $("#btn-explain");
+  // Clear explanation
+  const explainSection = $("#explain");
+  const explanationText = $("#explanation-text");
+  const btnExplain = $("#btn-explain");
+  if (explanationText) explanationText.textContent = "";
+  if (explainSection) explainSection.hidden = true;
+  if (btnExplain) btnExplain.disabled = true;
 
-    explanationText.textContent = "";
-    explainSection.hidden = true;
-    btnExplain.disabled = true;
+  // Optional: scroll to top
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
 
-    // --- RUN OPTIMIZATION ---
-    const targetAmount = parseFloat($("#target-amount").value || 0);
-    if (!targetAmount || targetAmount <= 0) {
-      alert("Please enter a positive target amount to finance.");
-      return;
-    }
+// ------------------------------------
+// Wire up UI on DOM ready
+// ------------------------------------
+document.addEventListener("DOMContentLoaded", () => {
+  // initial blank loan row
+  addLoanRow();
 
-    const loans = readLoansFromForm();
-    if (!loans.length) {
-      alert("Please enter at least one loan option.");
-      return;
-    }
+  // reset button (top-right of first card)
+  const resetBtn = $("#reset");
+  if (resetBtn) {
+    resetBtn.addEventListener("click", resetTool);
+  }
 
-    const optResult = optimizeMix(targetAmount, loans);
-    renderResults(optResult);
-  });   // <-- THIS was missing
+  // add loan button
+  const addLoanBtn = $("#add-loan");
+  if (addLoanBtn) {
+    addLoanBtn.addEventListener("click", () => addLoanRow());
+  }
 
-  // Explain plan
-  $("#btn-explain").addEventListener("click", requestExplanation);
+  // parse button
+  const parseBtn = $("#btn-parse");
+  if (parseBtn) {
+    parseBtn.addEventListener("click", parseFreeTextAndFill);
+  }
 
-  // Enable speech recognition
+  // optimize button
+  const optimizeBtn = $("#optimize");
+  if (optimizeBtn) {
+    optimizeBtn.addEventListener("click", () => {
+      // reset explanation on new run
+      const explainSection = $("#explain");
+      const explanationText = $("#explanation-text");
+      const btnExplain = $("#btn-explain");
+      if (explanationText) explanationText.textContent = "";
+      if (explainSection) explainSection.hidden = true;
+      if (btnExplain) btnExplain.disabled = true;
+
+      const targetAmount = parseFloat($("#target-amount")?.value || "0");
+      if (!targetAmount || targetAmount <= 0) {
+        alert("Please enter a positive target amount to finance.");
+        return;
+      }
+
+      const loans = readLoansFromForm();
+      if (!loans.length) {
+        alert("Please enter at least one loan option.");
+        return;
+      }
+
+      const optResult = optimizeMix(targetAmount, loans);
+      renderResults(optResult);
+    });
+  }
+
+  // explain button
+  const explainBtn = $("#btn-explain");
+  if (explainBtn) {
+    explainBtn.addEventListener("click", requestExplanation);
+    explainBtn.disabled = true; // disabled until first results
+  }
+
+  // speech recognition
   setupSpeechRecognition();
 });
-
